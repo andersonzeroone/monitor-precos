@@ -1,0 +1,31 @@
+# Evolution API: conecta o seu WhatsApp por QR code e envia as mensagens do monitor.
+# Subir:  docker compose up -d     (rode dentro desta pasta)
+# Parar:  docker compose down
+# As chaves ficam em evolution/.env (gerado na instalação; não compartilhe).
+name: evolution
+
+services:
+  api:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "127.0.0.1:8080:8080" # só acessível neste computador
+    env_file: .env
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  evolution_instances:
+  postgres_data:

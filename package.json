@@ -1,0 +1,22 @@
+{
+  "name": "monitor-precos",
+  "version": "1.0.0",
+  "description": "Monitora preços de produtos e avisa no WhatsApp (modo intensivo para a Black Friday).",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\"",
+    "check-url": "node --disable-warning=ExperimentalWarning src/check-url.js",
+    "evolution:setup": "node evolution/setup.mjs",
+    "evolution:up": "docker compose -f evolution/docker-compose.yml up -d",
+    "evolution:down": "docker compose -f evolution/docker-compose.yml down"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  }
+}
