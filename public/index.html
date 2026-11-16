@@ -60,7 +60,7 @@
   form.steps { display: flex; flex-direction: column; gap: 18px; }
   fieldset.step { border: 0; padding: 0; margin: 0; min-width: 0; }
   fieldset.step > legend { display: flex; align-items: center; gap: 8px; padding: 0; margin-bottom: 10px; font-weight: 600; }
-  .num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; }
+  .step-num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; }
   .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
   label.choice { flex-direction: row; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 14px; cursor: pointer; }
   label.choice:has(input:checked) { border-color: var(--accent); }
@@ -117,7 +117,7 @@
     <h2 id="product-form-title">Adicionar produto</h2>
     <form id="product-form" class="steps">
       <fieldset class="step">
-        <legend><span class="num">1</span> Como monitorar</legend>
+        <legend><span class="step-num">1</span> Como monitorar</legend>
         <div class="choices" role="radiogroup" aria-label="Como monitorar">
           <label class="choice"><input type="radio" name="kind" value="search" checked>
             <span><strong>🔎 Pelo nome</strong><small>Procura em várias lojas e fica com a oferta mais barata</small></span></label>
@@ -127,7 +127,7 @@
       </fieldset>
 
       <fieldset class="step">
-        <legend><span class="num">2</span> Produto</legend>
+        <legend><span class="step-num">2</span> Produto</legend>
         <div class="grid">
           <label class="wide" data-kind="search">Nome do produto para buscar *
             <input name="query" maxlength="100" placeholder="ex.: tcl 55c6k">
@@ -143,7 +143,7 @@
       </fieldset>
 
       <fieldset class="step">
-        <legend><span class="num">3</span> Quando me avisar no WhatsApp</legend>
+        <legend><span class="step-num">3</span> Quando me avisar no WhatsApp</legend>
         <div class="grid">
           <div class="wide pay" role="radiogroup" aria-label="Forma de pagamento">
             <span class="pay-label">Forma de pagamento</span>

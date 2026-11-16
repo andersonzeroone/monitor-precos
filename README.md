@@ -142,7 +142,20 @@ https://www.kabum.com.br/produto/621162/...
 
 O monitor só verifica enquanto o processo está rodando **e o computador está acordado**. Com a Evolution, o Docker Desktop também precisa estar aberto.
 
-- **No Mac:** deixe na tomada e rode com `caffeinate`, que impede o Mac de dormir:
+- **No Mac (recomendado): como serviço.** O monitor sobe sozinho quando você entra no Mac, volta em até 30 s se cair e não depende de uma janela de terminal aberta. Ele roda com `caffeinate`, que impede o Mac de dormir por inatividade (com a tampa fechada ele dorme mesmo assim; deixe aberto e na tomada).
+
+  ```bash
+  npm run service:install
+  ```
+
+  - Antes, pare o `npm start` que estiver rodando num terminal (o script recusa se a porta estiver ocupada).
+  - A saída vai para `data/monitor.log` (para acompanhar: `tail -f data/monitor.log`).
+  - Depois de atualizar o código: `npm run service:restart`.
+  - Se trocar a versão do Node, rode `npm run service:install` de novo.
+  - Para desligar e voltar a rodar na mão: `npm run service:uninstall`.
+  - Para os alertas saírem pela Evolution depois de reiniciar o Mac, o Docker Desktop precisa abrir sozinho: **Docker Desktop → Settings → General → Start Docker Desktop when you sign in**.
+
+- **No Mac, na mão:** deixe na tomada e rode com `caffeinate`. Para quando o terminal fecha:
 
   ```bash
   caffeinate -i npm start
@@ -167,5 +180,6 @@ src/whatsapp.js   provedores de envio
 src/db.js         banco SQLite (data/monitor.db)
 public/index.html o painel
 evolution/        Docker Compose e gerador de chaves da Evolution API
+service/          instala o monitor como serviço do macOS (launchd)
 test/             testes (npm test)
 ```
