@@ -5,6 +5,7 @@ import { blackFridayWindows } from './schedule.js';
 
 const DEFAULT_SETTINGS = {
   daily_times: '08:00,20:00', // horários normais (fuso do servidor)
+  interval_min: '0', // além dos horários, verificar a cada X minutos (0 = só nos horários)
   drop_alert_pct: '5', // avisa quando cair pelo menos X% desde a última leitura (0 = desliga)
   whatsapp_provider: 'console', // console | callmebot | evolution | cloudapi
 };
@@ -68,9 +69,25 @@ export function openDb(file = process.env.DB_FILE || 'data/monitor.db') {
     );
   `);
 
-  // Migração: faixa de aviso. alert_from_price = "avisar a partir de"; target_price = "preço ideal".
+  // Migração: faixa de aviso. alert_from_price = "avisar quando custar até"; target_price = "preço ideal".
+  // Busca por produto: kind = 'link' (padrão) ou 'search' (procura o termo em várias fontes; url fica vazia).
   const productCols = db.prepare('PRAGMA table_info(products)').all().map((c) => c.name);
-  if (!productCols.includes('alert_from_price')) db.exec('ALTER TABLE products ADD COLUMN alert_from_price REAL');
+  const newCols = {
+    alert_from_price: 'REAL',
+    kind: "TEXT NOT NULL DEFAULT 'link'",
+    query: 'TEXT',
+    required_words: 'TEXT',
+    excluded_words: 'TEXT',
+    min_price: 'REAL',
+    sources: 'TEXT',
+    best_store: 'TEXT',
+    best_url: 'TEXT',
+    offers_json: 'TEXT',
+    payment: "TEXT NOT NULL DEFAULT 'avista'", // 'avista' (menor preço/Pix) ou 'parcelado' (sem juros)
+  };
+  for (const [col, type] of Object.entries(newCols)) {
+    if (!productCols.includes(col)) db.exec(`ALTER TABLE products ADD COLUMN ${col} ${type}`);
+  }
 
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) insertSetting.run(k, v);

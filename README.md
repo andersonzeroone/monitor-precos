@@ -3,8 +3,10 @@
 Acompanha o preço de produtos todos os dias e manda alerta no WhatsApp quando o preço cai.
 Na Black Friday entra em **modo intensivo** e verifica a cada X minutos (de madrugada inclusive).
 
+- **Busca pelo nome em várias lojas**: cadastre "tcl 55c6k" e ele acha a oferta mais barata no Buscapé (que reúne várias lojas), Amazon e Kabum, sem precisar de um link
+- Ou vigie um **link específico** de uma loja
 - Painel web simples para cadastrar produtos, números de WhatsApp e a agenda
-- Alerta quando o preço entra na **sua faixa** (ex.: avisar a partir de R$ 2.800, ideal R$ 2.500) ou quando **cai X%** desde a última leitura
+- Alerta quando o preço entra na **sua faixa** (ex.: avisar quando custar até R$ 2.800, ideal R$ 2.500) ou quando **cai X%** desde a última leitura
 - Histórico de preços (minigráfico), menor preço já visto e log das mensagens enviadas
 - Janelas da próxima Black Friday e da Cyber Monday já vêm cadastradas
 
@@ -28,7 +30,26 @@ Antes de cadastrar, dá para testar se um link funciona:
 npm run check-url -- "https://www.kabum.com.br/produto/..."
 ```
 
-## Quais lojas funcionam
+## Busca pelo nome (recomendado)
+
+No cadastro, escolha **Buscar pelo nome em várias lojas** e informe o que buscar. A cada rodada o monitor procura o termo em cada fonte e fica com a oferta mais barata cujo título tem **todas** as palavras obrigatórias. O alerta diz a loja e traz o link; o painel mostra as 5 ofertas mais baratas.
+
+- **O que buscar:** de preferência o código do modelo, ex.: `tcl 55c6k`, `iphone 16 128gb`, `rtx 5070`.
+- **Palavras obrigatórias:** sem preencher, valem as palavras da busca. Números precisam estar "soltos": `55` casa com `55"` e `55C6K`, mas não com `550`.
+- **Palavras excluídas:** já vem com `suporte, controle, capa, cabo, película, combo, usado, recondicionado`, para não pegar acessório.
+- **Ignorar ofertas abaixo de:** descarta preço absurdo (acessório ou erro).
+- Use **Testar busca** antes de salvar para ver quais ofertas batem.
+
+| Fonte | O que traz | Consulta no máximo |
+| --- | --- | --- |
+| Buscapé | Menor preço entre várias lojas (Fast Shop, Magalu, Americanas, Kabum...) | a cada 10 min |
+| Zoom | O mesmo catálogo do Buscapé (use um ou outro) | a cada 10 min |
+| Amazon | Busca da Amazon | a cada 10 min |
+| Kabum | Busca da Kabum, com o preço à vista e o vendedor | sem limite |
+
+Na madrugada da Black Friday, mesmo com a verificação a cada 5 min, Buscapé e Amazon usam o último resultado até passar o intervalo da tabela, para não serem bloqueados. O Mercado Livre bloqueia a busca automática e não aparece no Buscapé para todos os produtos; para ele, use um link de afiliado no modo "link específico".
+
+## Quais lojas funcionam no modo link
 
 Testado em 15/11/2026:
 
@@ -99,17 +120,22 @@ https://www.kabum.com.br/produto/621162/...
 
 ## Agenda
 
-- **Horários diários** (padrão `08:00,20:00`): fora das janelas, verifica nesses horários.
+- **Verificar a cada (min)** (padrão 0, desligado): verifica tudo a cada X minutos, o dia todo. Mínimo de 5.
+- **Horários diários** (padrão `08:00,20:00`): verifica também nesses horários.
 - **Janelas intensivas**: entre o início e o fim, verifica a cada X minutos. Já vêm cadastradas:
   - Black Friday, madrugada: 26/11 22:00 → 27/11 06:00, a cada 5 min
   - Black Friday, dia: 27/11 06:00 → 28/11 00:00, a cada 15 min
   - Cyber Monday: 30/11 00:00 → 01/12 00:00, a cada 30 min
 - **Faixa de preço** (por produto, os dois campos são opcionais):
-  - **Avisar a partir de**: quando o preço fica igual ou abaixo desse valor, avisa. Avisa de novo a cada nova queda; preço repetido não gera aviso.
+  - **Avisar quando custar até**: quando o preço fica igual ou abaixo desse valor, avisa. Avisa de novo a cada nova queda; preço repetido não gera aviso.
   - **Preço ideal**: quando chega nele ou abaixo, o aviso vem destacado com 🎯.
-  - Se o preço sair da faixa (subir acima do "avisar a partir de"), o aviso é rearmado.
+  - Se o preço sair da faixa (subir acima do "avisar quando custar até"), o aviso é rearmado.
   - Exemplo com faixa R$ 2.800 → ideal R$ 2.500: R$ 2.950 não avisa; R$ 2.790 avisa 📉; R$ 2.650 avisa 📉; R$ 2.480 avisa 🎯; R$ 2.300 avisa 🎯.
 - **Queda**: avisa também quando cai pelo menos X% desde a leitura anterior (padrão 5%; 0 desliga).
+- **Forma de pagamento** (por produto):
+  - **À vista / Pix**: usa o menor preço que a loja mostra.
+  - **Parcelado sem juros**: só vale oferta que a loja marca como "sem juros", e o preço comparado com a sua faixa é o **total das parcelas** (ex.: 10x de R$ 359,90 = R$ 3.599). O aviso mostra as parcelas.
+  - Onde o parcelamento é lido: Amazon (busca e página do produto), Kabum (busca), Buscapé/Zoom (quando o total parcelado é igual ao preço à vista, que é quando eles escrevem "sem juros") e links de afiliado do Mercado Livre. Em links de outras lojas, o modo parcelado dá erro se a página não mostrar o parcelamento.
 - O fuso padrão é `America/Sao_Paulo` (mude com `TZ` no `.env`).
 
 ## Deixar rodando na Black Friday

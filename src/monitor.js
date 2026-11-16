@@ -1,4 +1,5 @@
 import { checkPrice } from './scraper.js';
+import { searchProduct } from './search.js';
 import { getSettings } from './db.js';
 import { sendWhatsApp } from './whatsapp.js';
 
@@ -11,9 +12,9 @@ export function formatBRL(n) {
 
 /**
  * Decide se um novo preço merece alerta.
- * - Faixa: avisa quando o preço fica <= "avisar a partir de" (alert_from_price) e de novo a cada nova queda.
+ * - Faixa: avisa quando o preço fica <= "avisar quando custar até" (alert_from_price) e de novo a cada nova queda.
  *   Se chegar no "preço ideal" (target_price) ou abaixo, o aviso vem destacado ('target').
- *   Se voltar acima do início da faixa, rearma. Sem "a partir de", a faixa começa no preço ideal.
+ *   Se voltar acima do limite, rearma. Sem limite, a faixa começa no preço ideal.
  * - Queda: avisa quando cai pelo menos dropPct% em relação à leitura anterior.
  */
 export function evaluatePrice(product, price, dropPct) {
@@ -39,23 +40,26 @@ export function evaluatePrice(product, price, dropPct) {
   return { reasons, lastAlertPrice };
 }
 
-export function alertBlock({ name, url, price, prev, target, alertFrom, lowest, reasons }) {
+export function alertBlock({ name, url, price, prev, target, alertFrom, lowest, reasons, store, offers, installments }) {
   const lines = [`*${name}*`];
-  let priceLine = `💰 ${formatBRL(price)}`;
+  let priceLine = `💰 ${formatBRL(price)}${installments ? ' no total parcelado' : ''}${store ? ` na ${store}` : ''}`;
   if (prev != null && prev !== price) {
     const pct = Math.round(((prev - price) / prev) * 100);
     priceLine += ` (antes ${formatBRL(prev)}${pct > 0 ? `, -${pct}%` : ''})`;
   }
   lines.push(priceLine);
+  if (installments) lines.push(`💳 ${installments.count}x de ${formatBRL(installments.value)} sem juros`);
   if (reasons.includes('target')) lines.push(`🎯 Chegou no seu preço ideal (${formatBRL(target)})`);
   if (reasons.includes('range')) {
     lines.push(
       target != null
-        ? `📉 Entrou na sua faixa: avisar a partir de ${formatBRL(alertFrom)} · ideal ${formatBRL(target)}`
-        : `📉 Abaixo de ${formatBRL(alertFrom)}, seu limite para avisar`,
+        ? `📉 Dentro do seu limite de ${formatBRL(alertFrom)} (preço ideal: ${formatBRL(target)})`
+        : `📉 Dentro do seu limite de ${formatBRL(alertFrom)}`,
     );
   }
   if (lowest == null || price < lowest) lines.push('⭐ Menor preço já registrado');
+  const others = (offers ?? []).filter((o) => o.url !== url).slice(0, 2);
+  if (others.length) lines.push(`Outras ofertas: ${others.map((o) => `${o.store} ${formatBRL(o.price)}`).join(' · ')}`);
   lines.push(url);
   return lines.join('\n');
 }
@@ -109,6 +113,7 @@ export async function runCheck(db, { productIds, delayMs = 1500 } = {}) {
     UPDATE products SET name = ?, last_price = ?, lowest_price = ?, last_checked_at = ?, last_error = NULL, last_alert_price = ?
     WHERE id = ?`);
   const updateErr = db.prepare('UPDATE products SET last_checked_at = ?, last_error = ? WHERE id = ?');
+  const updateBest = db.prepare('UPDATE products SET best_store = ?, best_url = ?, offers_json = ? WHERE id = ?');
 
   const blocks = [];
   let failed = 0;
@@ -117,17 +122,43 @@ export async function runCheck(db, { productIds, delayMs = 1500 } = {}) {
     if (i > 0) await sleep(delayMs + Math.random() * delayMs); // não martelar as lojas
     const checkedAt = new Date().toISOString();
     try {
-      const { price, title } = await checkPrice(p.url, p.selector);
+      // Produto por busca: o "preço" é o da oferta mais barata que bate com as palavras, em qualquer fonte.
+      const search = p.kind === 'search';
+      const parcelado = p.payment === 'parcelado';
+      let result = search ? await searchProduct(p) : await checkPrice(p.url, p.selector);
+      // Link no modo parcelado: vale o total das parcelas sem juros (a busca já faz isso sozinha).
+      if (!search && parcelado) {
+        if (!result.installments) throw new Error('Esta página não mostra parcelamento sem juros. Mude a forma de pagamento para à vista.');
+        result = { ...result, price: result.installments.total };
+      }
+      const { price, title } = result;
       const name = p.name || title;
       const { reasons, lastAlertPrice } = evaluatePrice(p, price, dropPct);
       const lowest = p.lowest_price == null ? price : Math.min(p.lowest_price, price);
 
       insertPrice.run(p.id, price, checkedAt);
       updateOk.run(name, price, lowest, checkedAt, lastAlertPrice, p.id);
+      if (search) {
+        updateBest.run(result.store, result.url, JSON.stringify({ offers: result.offers, failures: result.failures }), p.id);
+      } else {
+        updateBest.run(null, null, JSON.stringify({ installments: result.installments ?? null }), p.id);
+      }
 
       if (reasons.length) {
         blocks.push(
-          alertBlock({ name, url: p.url, price, prev: p.last_price, target: p.target_price, alertFrom: p.alert_from_price, lowest: p.lowest_price, reasons }),
+          alertBlock({
+            name,
+            url: search ? result.url : p.url,
+            price,
+            prev: p.last_price,
+            target: p.target_price,
+            alertFrom: p.alert_from_price,
+            lowest: p.lowest_price,
+            reasons,
+            store: search ? result.store : null,
+            offers: search ? result.offers : null,
+            installments: parcelado ? result.installments : null,
+          }),
         );
       }
     } catch (err) {

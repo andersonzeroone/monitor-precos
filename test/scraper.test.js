@@ -1,6 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePrice, extractFromHtml } from '../src/scraper.js';
+import { parsePrice, extractFromHtml, parseInstallments } from '../src/scraper.js';
+
+test('parcelamento: só aceita "sem juros"', () => {
+  assert.deepEqual(parseInstallments('ou R$3.699 em 10x R$369,90 sem juros'), { count: 10, value: 369.9, total: 3699 });
+  assert.deepEqual(parseInstallments('em até 12x de R$ 179,08R$179,08 sem juros'), { count: 12, value: 179.08, total: 2148.96 });
+  assert.equal(parseInstallments('12x R$307,28'), null); // com juros
+  assert.equal(parseInstallments('1x de R$ 17,48 sem juros'), null); // à vista não é parcelado
+});
+
+test('link de afiliado do ML: lê o parcelamento sem juros do card', () => {
+  const html = `<meta property="og:title" content="TV 55 C6K - R$">
+    <div class="poly-card"><a class="poly-component__title">TV 55 C6K</a>
+      <div class="poly-price__current"><span class="andes-money-amount"><span class="andes-money-amount__fraction">3.514</span></span></div>
+      <span class="poly-price__installments">ou R$3.699 em 10x R$369,90 sem juros</span></div>`;
+  const r = extractFromHtml(html, 'https://www.mercadolivre.com.br/social/afiliado');
+  assert.equal(r.price, 3514);
+  assert.deepEqual(r.installments, { count: 10, value: 369.9, total: 3699 });
+});
 
 test('parsePrice entende formatos brasileiros e internacionais', () => {
   const cases = [
@@ -82,4 +99,7 @@ test('link de afiliado do Mercado Livre: usa o card em destaque', () => {
 test('erro claro quando não acha o preço ou há captcha', () => {
   assert.throws(() => extractFromHtml('<h1>Oi</h1>', 'https://loja.com/x'), /seletor CSS/);
   assert.throws(() => extractFromHtml('<form action="/errors/validateCaptcha"></form>', 'https://loja.com/x'), /bloqueou/);
+  // Página normal do Mercado Livre bloqueada: orienta a usar o link de afiliado.
+  const mlBlocked = '<a href="/registration?registrationType=negative_traffic">entrar</a>';
+  assert.throws(() => extractFromHtml(mlBlocked, 'https://www.mercadolivre.com.br/tv/p/MLB123'), /link de afiliado/);
 });

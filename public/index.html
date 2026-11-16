@@ -38,7 +38,7 @@
   button.link { border: 0; padding: 4px 6px; background: none; color: var(--accent); }
   button.link.danger { color: var(--danger); }
   button:disabled { opacity: .55; cursor: default; }
-  form.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
   input, select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-width: 0; }
   input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -55,6 +55,29 @@
   .err { color: var(--danger); font-size: 13px; }
   .good { color: var(--ok); font-weight: 600; }
   .near { color: var(--hot); font-weight: 600; }
+  label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 14px; }
+  label small { font-size: 12px; color: var(--muted); }
+  form.steps { display: flex; flex-direction: column; gap: 18px; }
+  fieldset.step { border: 0; padding: 0; margin: 0; min-width: 0; }
+  fieldset.step > legend { display: flex; align-items: center; gap: 8px; padding: 0; margin-bottom: 10px; font-weight: 600; }
+  .num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; }
+  .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+  label.choice { flex-direction: row; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 14px; cursor: pointer; }
+  label.choice:has(input:checked) { border-color: var(--accent); }
+  label.choice:has(input:disabled) { cursor: default; opacity: .7; }
+  label.choice span { display: flex; flex-direction: column; gap: 2px; }
+  label.choice input { margin-top: 3px; }
+  .pay { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; }
+  .pay-label { width: 100%; font-size: 13px; color: var(--muted); }
+  details.advanced { border-top: 1px solid var(--line); padding-top: 12px; }
+  details.advanced > summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  details.advanced > .grid { margin-top: 12px; }
+  fieldset.checks { border: 0; padding: 0; margin: 0; min-width: 0; }
+  fieldset.checks legend { font-size: 13px; color: var(--muted); padding: 0; margin-bottom: 6px; }
+  .preview { margin-top: 12px; font-size: 14px; }
+  .preview ul, td.name ul { margin: 6px 0 0; padding-left: 18px; }
+  td.name details { margin-top: 4px; font-size: 13px; }
+  p.intro { margin: -6px 0 12px; }
   .actions { white-space: nowrap; }
   .alerts li { border-top: 1px solid var(--line); padding: 10px 0; list-style: none; }
   .alerts ul { margin: 0; padding: 0; }
@@ -91,32 +114,106 @@
   </section>
 
   <section class="card">
-    <h2 id="product-form-title">Produtos</h2>
-    <form id="product-form" class="grid">
-      <label class="wide">Link do produto *
-        <input name="url" type="url" required placeholder="https://www.loja.com.br/produto/...">
-      </label>
-      <label>Nome (opcional, pega da página)
-        <input name="name" maxlength="150">
-      </label>
-      <label>Avisar a partir de (R$)
-        <input name="alert_from_price" inputmode="decimal" placeholder="ex.: 2.800">
-      </label>
-      <label>Preço ideal (R$)
-        <input name="target_price" inputmode="decimal" placeholder="ex.: 2.500">
-      </label>
-      <label>Seletor CSS do preço (opcional)
-        <input name="selector" maxlength="300" placeholder="ex.: .preco-final">
-      </label>
+    <h2 id="product-form-title">Adicionar produto</h2>
+    <form id="product-form" class="steps">
+      <fieldset class="step">
+        <legend><span class="num">1</span> Como monitorar</legend>
+        <div class="choices" role="radiogroup" aria-label="Como monitorar">
+          <label class="choice"><input type="radio" name="kind" value="search" checked>
+            <span><strong>🔎 Pelo nome</strong><small>Procura em várias lojas e fica com a oferta mais barata</small></span></label>
+          <label class="choice"><input type="radio" name="kind" value="link">
+            <span><strong>🔗 Por um link</strong><small>Vigia o preço de um anúncio específico de uma loja</small></span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="step">
+        <legend><span class="num">2</span> Produto</legend>
+        <div class="grid">
+          <label class="wide" data-kind="search">Nome do produto para buscar *
+            <input name="query" maxlength="100" placeholder="ex.: tcl 55c6k">
+            <small>O código do modelo funciona melhor (ex.: 55C6K, iPhone 16 128GB, RTX 5070).</small>
+          </label>
+          <label class="wide" data-kind="link" hidden>Link do produto *
+            <input name="url" type="url" placeholder="https://www.loja.com.br/produto/...">
+          </label>
+          <label class="wide">Apelido para mostrar no painel (opcional)
+            <input name="name" maxlength="150" placeholder="ex.: TV da sala">
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="step">
+        <legend><span class="num">3</span> Quando me avisar no WhatsApp</legend>
+        <div class="grid">
+          <div class="wide pay" role="radiogroup" aria-label="Forma de pagamento">
+            <span class="pay-label">Forma de pagamento</span>
+            <label class="check"><input type="radio" name="payment" value="parcelado" checked> Parcelado sem juros (vale o total das parcelas)</label>
+            <label class="check"><input type="radio" name="payment" value="avista"> À vista / Pix (menor preço)</label>
+          </div>
+          <label>Avisar quando custar até (R$)
+            <input name="alert_from_price" inputmode="decimal" placeholder="ex.: 2.800">
+            <small>Avisa quando o preço ficar igual ou abaixo disso, e de novo a cada queda.</small>
+          </label>
+          <label>Preço ideal (R$)
+            <input name="target_price" inputmode="decimal" placeholder="ex.: 2.500">
+            <small>Quando chegar aqui, o aviso vem com 🎯.</small>
+          </label>
+        </div>
+      </fieldset>
+
+      <details class="advanced">
+        <summary>Opções avançadas</summary>
+        <div class="grid">
+          <fieldset class="wide checks" data-kind="search">
+            <legend>Onde buscar</legend>
+            <div id="source-checks" class="row"></div>
+          </fieldset>
+          <label data-kind="search">Palavras obrigatórias
+            <input name="required_words" maxlength="200" placeholder="ex.: 55 c6k">
+            <small>Todas precisam estar no título. Vazio = as palavras da busca.</small>
+          </label>
+          <label data-kind="search">Palavras excluídas
+            <input name="excluded_words" maxlength="300">
+            <small>Separe por vírgula. Evita acessórios.</small>
+          </label>
+          <label data-kind="search">Ignorar ofertas abaixo de (R$)
+            <input name="min_price" inputmode="decimal" placeholder="ex.: 1.500">
+            <small>Descarta preço absurdo (acessório ou erro).</small>
+          </label>
+          <label class="wide" data-kind="link" hidden>Seletor CSS do preço
+            <input name="selector" maxlength="300" placeholder="ex.: .preco-final">
+            <small>Só se o monitor não achar o preço sozinho.</small>
+          </label>
+        </div>
+      </details>
+
       <div class="row">
+        <button type="button" id="search-preview" data-kind="search">Testar busca</button>
         <button class="primary" type="submit" id="product-submit">Adicionar</button>
         <button type="button" id="product-cancel" hidden>Cancelar</button>
       </div>
     </form>
+    <div id="preview" class="preview" aria-live="polite"></div>
+  </section>
+
+  <section class="card">
+    <h2>🔎 Buscas por nome</h2>
+    <p class="muted small intro">Cada linha é um nome que você salvou. O monitor procura esse nome nas lojas marcadas e mostra a oferta mais barata que encontrou.</p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Produto</th><th>Atual</th><th>Menor</th><th>Faixa</th><th>Histórico</th><th>Verificado</th><th></th></tr></thead>
-        <tbody id="products"></tbody>
+        <thead><tr><th>Busca salva</th><th>Melhor oferta</th><th>Menor já visto</th><th>Faixa</th><th>Histórico</th><th>Verificado</th><th></th></tr></thead>
+        <tbody id="searches"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>🔗 Links vigiados</h2>
+    <p class="muted small intro">Cada linha é o link de uma loja que você salvou. O monitor só olha esse link.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Link salvo</th><th>Preço</th><th>Menor já visto</th><th>Faixa</th><th>Histórico</th><th>Verificado</th><th></th></tr></thead>
+        <tbody id="links"></tbody>
       </table>
     </div>
   </section>
@@ -149,12 +246,13 @@
     <section class="card">
       <h2>Agenda e alertas</h2>
       <form id="settings-form" class="grid">
+        <label>Verificar a cada (min)<input name="interval_min" type="number" min="0" max="1440" step="1" placeholder="0"></label>
         <label>Horários diários<input name="daily_times" placeholder="08:00,20:00"></label>
-        <label>Avisar quedas a partir de (%)<input name="drop_alert_pct" type="number" min="0" max="90" step="0.5"></label>
+        <label>Avisar quedas de pelo menos (%)<input name="drop_alert_pct" type="number" min="0" max="90" step="0.5"></label>
         <label class="wide">Envio de WhatsApp<select name="whatsapp_provider" id="provider"></select></label>
         <div><button class="primary" type="submit">Salvar</button></div>
       </form>
-      <p class="muted small">Fora das janelas abaixo, verifica só nos horários diários. Queda 0 = só avisa pelo preço alvo.</p>
+      <p class="muted small">Verifica a cada X minutos (0 = desliga) e também nos horários diários. Nas janelas da Black Friday vale o intervalo da janela, se for menor. Queda 0 = não avisa por queda percentual.</p>
     </section>
   </div>
 
@@ -233,7 +331,9 @@ function renderStatus() {
   const win = s.activeWindows[0];
   const mode = win
     ? `<span class="pill hot">🔥 Modo intensivo: ${esc(win.label)} · a cada ${Math.min(...s.activeWindows.map((w) => w.interval_min))} min</span>`
-    : '<span class="pill">Modo normal · horários diários</span>';
+    : Number(state.settings.interval_min) > 0
+      ? `<span class="pill">Modo normal · a cada ${Number(state.settings.interval_min)} min</span>`
+      : '<span class="pill">Modo normal · horários diários</span>';
   const running = s.running ? '<span class="pill">⏳ Verificando agora…</span>' : '';
   const last = s.lastRun
     ? `Última: ${dt(s.lastRun.finishedAt)} — ${s.lastRun.checked} produto(s), ${s.lastRun.failed} erro(s), ${s.lastRun.alerts} alerta(s)`
@@ -254,19 +354,18 @@ function renderStatus() {
   $('#apikey-field').hidden = prov !== 'callmebot';
 }
 
-function renderProducts() {
-  const rows = state.products.map((p) => {
-    const hit = p.target_price != null && p.last_price != null && p.last_price <= p.target_price;
-    const near = !hit && p.alert_from_price != null && p.last_price != null && p.last_price <= p.alert_from_price;
-    const range = [
-      p.alert_from_price != null ? `avisa ≤ ${brl(p.alert_from_price)}` : '',
-      p.target_price != null ? `ideal ${brl(p.target_price)}` : '',
-    ].filter(Boolean).join('<br>') || '—';
-    return `<tr class="${p.active ? '' : 'paused'}">
-      <td class="name"><a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">${esc(p.name || host(p.url))}</a>
-        <div class="muted small">${esc(host(p.url))}${p.active ? '' : ' · pausado'}${p.selector ? ' · seletor próprio' : ''}</div>
-        ${p.last_error ? `<div class="err">${esc(p.last_error)}</div>` : ''}</td>
-      <td class="num ${hit ? 'good' : near ? 'near' : ''}">${brl(p.last_price)}${hit ? ' 🎯' : near ? ' 📉' : ''}</td>
+const newTab = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+
+// Colunas comuns às duas tabelas: preço atual, menor, faixa, histórico, verificado e ações.
+function commonCells(p, priceExtra = '') {
+  const hit = p.target_price != null && p.last_price != null && p.last_price <= p.target_price;
+  const near = !hit && p.alert_from_price != null && p.last_price != null && p.last_price <= p.alert_from_price;
+  const range = [
+    p.alert_from_price != null ? `avisa até ${brl(p.alert_from_price)}` : '',
+    p.target_price != null ? `ideal ${brl(p.target_price)}` : '',
+  ].filter(Boolean).join('<br>') || '—';
+  return `
+      <td class="num ${hit ? 'good' : near ? 'near' : ''}">${brl(p.last_price)}${hit ? ' 🎯' : near ? ' 📉' : ''}${priceExtra}</td>
       <td class="num">${brl(p.lowest_price)}</td>
       <td class="num small">${range}</td>
       <td>${spark(p.history)}</td>
@@ -276,9 +375,51 @@ function renderProducts() {
         <button class="link" data-act="edit" data-id="${p.id}">Editar</button>
         <button class="link" data-act="toggle" data-id="${p.id}">${p.active ? 'Pausar' : 'Ativar'}</button>
         <button class="link danger" data-act="delete" data-id="${p.id}">Excluir</button>
-      </td></tr>`;
-  });
-  $('#products').innerHTML = rows.join('') || '<tr><td colspan="7" class="muted">Nenhum produto ainda. Cole um link acima.</td></tr>';
+      </td>`;
+}
+
+function searchRow(p) {
+  const labels = (p.sources || '').split(',').map((id) => state.search.sources.find((s) => s.id === id)?.label).filter(Boolean);
+  let found = {};
+  try { found = JSON.parse(p.offers_json || '{}'); } catch {}
+  const offers = found.offers ?? [];
+  const parcelado = p.payment === 'parcelado';
+  const list = offers.length
+    ? `<div class="small" style="margin-top:6px">Ofertas encontradas:</div><ul class="small">${offers.slice(0, 3).map((o) =>
+        `<li>${brl(o.price)}${parcelado ? ` ${installmentsText(o.installments)}` : ''} · ${esc(o.store)} · ${newTab(o.url, esc(o.title.slice(0, 60)))}</li>`).join('')}</ul>`
+    : '';
+  const fails = found.failures?.length ? `<div class="muted small">Sem resposta: ${esc(found.failures.join('; '))}</div>` : '';
+  const best = p.best_store
+    ? `${parcelado ? `<div class="small">${installmentsText(offers[0]?.installments)}</div>` : ''}<div class="small muted">${esc(p.best_store)}</div>${p.best_url ? `<div class="small">${newTab(p.best_url, 'ver oferta')}</div>` : ''}`
+    : '';
+  return `<tr class="${p.active ? '' : 'paused'}">
+      <td class="name"><strong>${esc(p.name || p.query)}</strong>
+        <div class="muted small">Buscando “${esc(p.query)}” em ${esc(labels.join(', '))}${parcelado ? ' · 💳 parcelado sem juros' : ''}${p.active ? '' : ' · pausado'}</div>
+        ${list}${fails}${p.last_error ? `<div class="err">${esc(p.last_error)}</div>` : ''}</td>${commonCells(p, best)}</tr>`;
+}
+
+function installmentsText(i) {
+  return i ? `${i.count}x de ${brl(i.value)} sem juros` : '';
+}
+
+function linkRow(p) {
+  const parcelado = p.payment === 'parcelado';
+  let found = {};
+  try { found = JSON.parse(p.offers_json || '{}'); } catch {}
+  const extra = parcelado && found.installments ? `<div class="small">${installmentsText(found.installments)}</div>` : '';
+  return `<tr class="${p.active ? '' : 'paused'}">
+      <td class="name">${newTab(p.url, esc(p.name || host(p.url)))}
+        <div class="muted small">${esc(host(p.url))}${p.selector ? ' · seletor próprio' : ''}${parcelado ? ' · 💳 parcelado sem juros' : ''}${p.active ? '' : ' · pausado'}</div>
+        ${p.last_error ? `<div class="err">${esc(p.last_error)}</div>` : ''}</td>${commonCells(p, extra)}</tr>`;
+}
+
+function renderProducts() {
+  const searches = state.products.filter((p) => p.kind === 'search');
+  const links = state.products.filter((p) => p.kind !== 'search');
+  $('#searches').innerHTML = searches.map(searchRow).join('')
+    || '<tr><td colspan="7" class="muted">Nenhuma busca salva ainda. Escreva o nome do produto em “Nome do produto para buscar”, acima.</td></tr>';
+  $('#links').innerHTML = links.map(linkRow).join('')
+    || '<tr><td colspan="7" class="muted">Nenhum link salvo.</td></tr>';
 }
 
 function renderContacts() {
@@ -315,6 +456,7 @@ function fillSettings() {
   $('#provider').innerHTML = Object.entries(state.providers)
     .map(([k, v]) => `<option value="${esc(k)}">${esc(v.label)}</option>`).join('');
   f.daily_times.value = state.settings.daily_times;
+  f.interval_min.value = state.settings.interval_min ?? 0;
   f.drop_alert_pct.value = state.settings.drop_alert_pct;
   f.whatsapp_provider.value = state.settings.whatsapp_provider;
   settingsFilled = true;
@@ -388,30 +530,95 @@ async function load() {
   state = await api('GET', '/api/state');
   TZ = state.status.timezone;
   if (!settingsFilled) fillSettings();
+  if (!formReady) prepareProductForm();
   await loadEvo();
   renderStatus(); renderProducts(); renderContacts(); renderWindows(); renderAlerts(); renderEvo();
 }
 
+// ----- formulário de produto: busca por nome ou link -----
+let formReady = false;
+
+function setKind(kind) {
+  const f = $('#product-form');
+  f.querySelector(`input[name="kind"][value="${kind}"]`).checked = true;
+  f.querySelectorAll('[data-kind]').forEach((el) => { el.hidden = el.dataset.kind !== kind; });
+  f.url.required = kind === 'link';
+  f.query.required = kind === 'search';
+  $('#preview').innerHTML = '';
+}
+
+function searchDefaults() {
+  const f = $('#product-form');
+  f.excluded_words.value = state.search.defaultExcluded;
+  f.querySelectorAll('input[name="sources"]').forEach((c) => { c.checked = state.search.defaultSources.includes(c.value); });
+}
+
+function prepareProductForm() {
+  $('#source-checks').innerHTML = state.search.sources
+    .map((s) => `<label class="check"><input type="checkbox" name="sources" value="${esc(s.id)}"> ${esc(s.label)}</label>`).join('');
+  searchDefaults();
+  setKind('search');
+  formReady = true;
+}
+
+function productBody() {
+  const fd = new FormData($('#product-form'));
+  const body = Object.fromEntries(fd);
+  body.sources = fd.getAll('sources');
+  return body;
+}
+
 function resetProductForm() {
   editingId = null;
-  $('#product-form').reset();
+  const f = $('#product-form');
+  f.reset();
+  f.querySelector('details.advanced').open = false;
+  f.querySelectorAll('input[name="kind"]').forEach((r) => { r.disabled = false; });
+  searchDefaults();
+  setKind('search');
   $('#product-submit').textContent = 'Adicionar';
   $('#product-cancel').hidden = true;
-  $('#product-form-title').textContent = 'Produtos';
+  $('#product-form-title').textContent = 'Adicionar produto';
 }
+
+$('#product-form').addEventListener('change', (e) => {
+  if (e.target.name === 'kind') setKind(e.target.value);
+});
 
 $('#product-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  const body = Object.fromEntries(new FormData(e.target));
+  const body = productBody();
+  const search = $('#product-form').query.required;
+  if (search && !body.sources.length) return toast('⚠️ Escolha pelo menos um lugar para buscar');
   const id = editingId;
   act(async () => {
     if (id) await api('PUT', `/api/products/${id}`, body);
     else await api('POST', '/api/products', body);
     resetProductForm();
-    if (!id) setTimeout(load, 6000); // a primeira leitura roda em segundo plano
-  }, id ? 'Produto atualizado' : 'Produto adicionado — buscando o preço…');
+    if (!id) setTimeout(load, search ? 12000 : 6000); // a primeira leitura roda em segundo plano
+  }, id ? 'Produto atualizado' : search ? 'Busca cadastrada — procurando ofertas…' : 'Produto adicionado — buscando o preço…');
 });
 $('#product-cancel').addEventListener('click', resetProductForm);
+
+$('#search-preview').addEventListener('click', async (e) => {
+  const body = productBody();
+  if (!body.query?.trim()) return toast('⚠️ Diga o que buscar');
+  if (!body.sources.length) return toast('⚠️ Escolha pelo menos um lugar para buscar');
+  e.target.disabled = true;
+  $('#preview').innerHTML = '<span class="muted">Buscando nas lojas…</span>';
+  try {
+    const r = await api('POST', '/api/search-preview', body);
+    const head = `<strong>${r.offers.length}</strong> de ${r.total} resultado(s) têm todas as palavras: ${r.required.map(esc).join(', ')}`;
+    const list = r.offers.length
+      ? `<ul>${r.offers.map((o) => `<li>${brl(o.price)}${body.payment === 'parcelado' ? ` (${installmentsText(o.installments)})` : ''} · ${esc(o.store)} · <a href="${esc(o.url)}" target="_blank" rel="noopener noreferrer">${esc(o.title.slice(0, 90))}</a></li>`).join('')}</ul>`
+      : `<div class="err">${body.payment === 'parcelado' ? 'Nenhuma oferta com parcelamento sem juros bateu.' : 'Nenhuma oferta bateu. Tente outras palavras obrigatórias.'}</div>`;
+    const fails = r.failures.length ? `<div class="muted small">Sem resposta: ${esc(r.failures.join('; '))}</div>` : '';
+    $('#preview').innerHTML = head + list + fails;
+  } catch (err) {
+    $('#preview').innerHTML = `<div class="err">${esc(err.message)}</div>`;
+  }
+  e.target.disabled = false;
+});
 
 $('#contact-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -472,17 +679,30 @@ document.addEventListener('click', (e) => {
       break;
     case 'edit': {
       const f = $('#product-form');
+      const search = p.kind === 'search';
       editingId = id;
-      f.url.value = p.url; f.name.value = p.name ?? '';
+      setKind(search ? 'search' : 'link');
+      f.querySelectorAll('input[name="kind"]').forEach((r) => { r.disabled = true; }); // o tipo não muda depois
+      f.querySelector('details.advanced').open = true;
+      f.url.value = p.url ?? ''; f.name.value = p.name ?? '';
       const br = (n) => (n != null ? String(n).replace('.', ',') : '');
       f.target_price.value = br(p.target_price);
       f.alert_from_price.value = br(p.alert_from_price);
       f.selector.value = p.selector ?? '';
+      f.querySelector(`input[name="payment"][value="${p.payment === 'parcelado' ? 'parcelado' : 'avista'}"]`).checked = true;
+      if (search) {
+        f.query.value = p.query ?? '';
+        f.required_words.value = p.required_words ?? '';
+        f.excluded_words.value = p.excluded_words ?? '';
+        f.min_price.value = br(p.min_price);
+        const ids = (p.sources || '').split(',');
+        f.querySelectorAll('input[name="sources"]').forEach((c) => { c.checked = ids.includes(c.value); });
+      }
       $('#product-submit').textContent = 'Salvar alterações';
       $('#product-cancel').hidden = false;
-      $('#product-form-title').textContent = `Editando: ${p.name || host(p.url)}`;
+      $('#product-form-title').textContent = `Editando: ${p.name || host(p.url) || p.query}`;
       f.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      f.url.focus();
+      (search ? f.query : f.url).focus();
       break;
     }
     case 'toggle': act(() => api('PUT', `/api/products/${id}`, { active: !p.active })); break;

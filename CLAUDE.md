@@ -16,7 +16,8 @@ Monitor de preços com painel web, alerta no WhatsApp e modo intensivo na Black 
 - `server.js`: carrega o `.env`, define `TZ` e só depois importa os módulos (`await import`, mantenha essa ordem); rotas da API, validação, autenticação e o loop do agendador.
 - `db.js`: `openDb` cria o schema, roda migrações, grava settings padrão e as janelas da Black Friday na primeira execução.
 - `monitor.js`: `runCheck` (lê preços, grava histórico, decide e envia alertas), `evaluatePrice`, `alertBlock`, `buildMessages`, `notifyAll`.
-- `scraper.js`: `fetchPage`, `extractFromHtml` e `parsePrice` (formatos BR e internacionais).
+- `scraper.js`: `fetchPage`, `extractFromHtml`, `parsePrice` (formatos BR e internacionais) e `looksBlocked`.
+- `search.js`: produtos por busca (`kind = 'search'`): fontes (`SOURCES`), filtro por palavras (`matchOffers`), cache por fonte e `searchProduct`.
 - `schedule.js`: horários diários, janelas intensivas, `computeNextRun` e a data da Black Friday.
 - `whatsapp.js`: provedores, `normalizePhone` (sem DDI assume 55), status e QR da Evolution.
 - `check-url.js`: CLI do `npm run check-url`.
@@ -30,7 +31,7 @@ Monitor de preços com painel web, alerta no WhatsApp e modo intensivo na Black 
 
 ## Regras de alerta (`evaluatePrice`, src/monitor.js)
 
-- Faixa: `alert_from_price` ("avisar a partir de") e `target_price` ("preço ideal"). Sem "a partir de", a faixa começa no ideal.
+- Faixa: `alert_from_price` ("avisar quando custar até", o limite de cima) e `target_price` ("preço ideal"). Sem limite, a faixa começa no ideal. Na interface, nunca use "a partir de" para esse limite: passa a ideia de "daí para cima".
 - Avisa quando o preço entra na faixa (`<=`) e de novo a cada queda abaixo de `last_alert_price`; preço repetido não avisa. Motivo `target` (🎯) se estiver `<=` ideal, senão `range` (📉).
 - Preço acima da faixa zera `last_alert_price` (rearma). Mudar a faixa pelo painel (`PUT /api/products/:id`) também rearma.
 - Independente da faixa: `drop` quando cai pelo menos `drop_alert_pct`% em relação a `last_price` (0 desliga; a primeira leitura nunca avisa).
@@ -49,9 +50,19 @@ Ordem, parando no primeiro que achar:
 
 Funcionam Amazon, Kabum e links de afiliado do ML. Magalu, Casas Bahia e a página normal de produto do ML bloqueiam (HTTP 403 ou captcha), e a mensagem de erro já diz isso. Não adicione técnicas para burlar anti-bot (stealth, navegador disfarçado, resolver captcha, rotação de IP).
 
+## Produtos por busca (src/search.js)
+
+- `products.kind`: `'link'` (padrão, usa `url`/`selector`) ou `'search'` (usa `query`, `required_words`, `excluded_words`, `min_price`, `sources`; `url` fica vazia). Na busca, `last_price` é a oferta mais barata que bateu; `best_store`, `best_url` e `offers_json` (`{offers, failures}`) guardam o resto. O tipo não muda depois de criado.
+- Fontes: Buscapé e Zoom (mesmo catálogo, lido de `__NEXT_DATA__.props.initialReduxState.hits.hits`, com `bestOffer.merchantName`), Amazon (cards `s-search-result`, link por ASIN) e Kabum (`__NEXT_DATA__ ... catalogServer.data`, menor entre `price` e `priceWithDiscount`). Padrão: `buscape,amazon,kabum`.
+- `matchOffers`: todas as palavras obrigatórias (vírgula ou espaço; sem nenhuma, as da busca) e nenhuma excluída (só vírgula; aceita expressões), sem acento e sem maiúscula; números só casam "soltos" (`55` não casa com `550`). Depois, `min_price`, URL repetida e ordem por preço.
+- Cache em memória por fonte e busca (`minIntervalMin`: comparadores 10, Amazon 10, Kabum 0), para não martelar os sites no modo intensivo. Uma fonte com falha não derruba as outras; só dá erro se nenhuma oferta bater.
+- Mudar a busca (`PUT`) zera `last_price` e `last_alert_price`, para não gerar alerta de queda falso. `POST /api/search-preview` mostra o resultado sem salvar (botão "Testar busca").
+- `products.payment`: `'avista'` (padrão, menor preço/Pix) ou `'parcelado'`. No parcelado, só valem ofertas com `installments` (`{count, value, total}`, só quando a loja marca "sem juros"; `parseInstallments` em scraper.js) e o preço passa a ser `installments.total` (`applyPayment` em search.js; em links, no `runCheck`). Kabum: sem juros quando parcelas × valor ≈ `price`; Buscapé/Zoom: quando `total_value <= price`. Mudar a forma de pagamento zera `last_price`, como mudar a busca.
+- Pelando/Promobit ficaram de fora (promoções antigas geram alerta falso). Mercado Livre bloqueia a busca e a API pede token de app de desenvolvedor.
+
 ## Agendador (src/schedule.js + loop em src/server.js)
 
-- Um `setInterval` de 15 s compara a hora com `state.nextRunAt`. `computeNextRun` pega o menor entre o próximo horário diário, o início da próxima janela e, dentro de uma janela, `last_run_at + interval_min` (ou agora, se ainda não rodou nela).
+- Um `setInterval` de 15 s compara a hora com `state.nextRunAt`. `computeNextRun` pega o menor entre o próximo horário diário, o início da próxima janela, dentro de uma janela `last_run_at + interval_min` da janela (ou agora, se ainda não rodou nela) e, se `settings.interval_min > 0` (`everyMin`, mínimo 5), `last_run_at + everyMin`.
 - `last_run_at` é salvo em `settings` no início de cada rodada (agendada ou "Verificar agora"), então sobrevive a reinícios. Verificar ou cadastrar um produto só não mexe nele.
 - As janelas da próxima Black Friday (sexta após a 4ª quinta de novembro) e da Cyber Monday são inseridas uma única vez (flag `windows_seeded`); nos anos seguintes não se renovam sozinhas.
 - Fuso: `process.env.TZ ||= 'America/Sao_Paulo'` em server.js. Datas no banco em ISO (UTC); horários diários no fuso do processo. Os testes de agenda fixam `TZ` antes de importar.
