@@ -10,6 +10,7 @@ Monitor de preços com painel web, alerta no WhatsApp e modo intensivo na Black 
 - `npm test`: `node:test` em `test/*.test.js` (só funções puras; não sobe servidor nem abre o banco)
 - `npm run check-url -- "<url>" ["seletor"]`: testa a extração de um link
 - `npm run evolution:setup|up|down`: chaves e Docker da Evolution API
+- `npm run service:install|uninstall|restart`: o monitor como LaunchAgent do macOS (`service/install.mjs`, label `com.monitor-precos`, plist em `~/Library/LaunchAgents`, `KeepAlive`, `caffeinate -i` + caminho absoluto do Node da instalação, log em `data/monitor.log`). O install recusa se a porta já estiver ocupada.
 
 ## Mapa de src/
 
@@ -83,7 +84,7 @@ Funcionam Amazon, Kabum e links de afiliado do ML. Magalu, Casas Bahia e a pági
 
 ## Verificar mudanças sem afetar o usuário
 
-- O usuário deixa o monitor rodando na porta 3000 (`caffeinate -i npm start`) com `data/monitor.db`. Não suba nada na 3000 nem outra instância usando `data/monitor.db` (seriam dois agendadores e alertas duplicados).
+- O monitor do usuário roda como serviço do launchd (`com.monitor-precos`) na porta 3000 com `data/monitor.db`; a saída está em `data/monitor.log`. Não suba nada na 3000 nem outra instância usando `data/monitor.db` (seriam dois agendadores e alertas duplicados). Matar o processo não adianta: o launchd sobe de novo em até 30 s.
 - Comece por `npm test`.
 - Para testar o painel, use uma cópia do banco com o provedor em `console` antes de subir:
 
@@ -95,4 +96,4 @@ Funcionam Amazon, Kabum e links de afiliado do ML. Magalu, Casas Bahia e a pági
 
   Variáveis da linha de comando têm prioridade sobre o `.env`, mas ele continua sendo carregado (com as credenciais): com outro provedor, cadastrar ou verificar produtos, ou o próprio agendador da cópia, mandaria WhatsApp de verdade.
 - Nunca envie mensagem de teste real ("Enviar teste no WhatsApp", `POST /api/test-message` ou a Evolution direto) sem o usuário confirmar.
-- O monitor do usuário não recarrega sozinho: depois de mudar o código, avise que ele precisa dar Ctrl+C e rodar `caffeinate -i npm start` de novo.
+- O monitor do usuário não recarrega sozinho: depois de mudar o código, reinicie com `npm run service:restart` (ou avise o usuário para rodar).

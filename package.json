@@ -14,7 +14,10 @@
     "check-url": "node --disable-warning=ExperimentalWarning src/check-url.js",
     "evolution:setup": "node evolution/setup.mjs",
     "evolution:up": "docker compose -f evolution/docker-compose.yml up -d",
-    "evolution:down": "docker compose -f evolution/docker-compose.yml down"
+    "evolution:down": "docker compose -f evolution/docker-compose.yml down",
+    "service:install": "node service/install.mjs",
+    "service:uninstall": "node service/install.mjs uninstall",
+    "service:restart": "launchctl kickstart -k gui/$(id -u)/com.monitor-precos"
   },
   "dependencies": {
     "cheerio": "^1.0.0"
