@@ -31,6 +31,12 @@ const META_SELECTORS = [
   '[itemprop="price"]',
 ];
 
+/** A página parece uma tela de bloqueio anti-robô? (Só use quando não achou o que procurava: */
+/** algumas páginas normais citam "captcha" nos scripts.) */
+export function looksBlocked(html) {
+  return /captcha|are you a human|robot check|access denied|perimeterx|cf-chl|challenge-platform|negative_traffic/i.test(html);
+}
+
 /**
  * Converte textos como "R$ 1.299,90", "1,299.90", "1299.9" ou 1299.9 em número.
  * Retorna null se não houver um preço válido.
@@ -71,6 +77,20 @@ export function parsePrice(value) {
 
 function round2(n) {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * "em até 10x de R$ 369,90 sem juros" → { count: 10, value: 369.9, total: 3699 }.
+ * Só aceita parcelamento que a loja marca como sem juros.
+ */
+export function parseInstallments(text) {
+  const m = String(text ?? '')
+    .replace(/\s+/g, ' ')
+    .match(/(\d{1,2})\s*x\s*(?:de\s*)?R\$\s*([\d.]+,\d{2})[^x]{0,25}?sem juros/i);
+  if (!m) return null;
+  const count = Number(m[1]);
+  const value = parsePrice(m[2]);
+  return count >= 2 && value ? { count, value, total: round2(count * value) } : null;
 }
 
 function* walkJson(node) {
@@ -141,7 +161,8 @@ function fromMercadoLivreSocial($) {
   const card = ogTitle ? cards.find((c) => titleOf(c) === ogTitle) : cards[0];
   if (!card) return null;
   const price = priceFromElement(card.find('.poly-price__current .andes-money-amount').first());
-  return price ? { price, title: titleOf(card) || ogTitle, source: 'mercado livre: card em destaque' } : null;
+  const installments = parseInstallments(card.find('.poly-price__installments').first().text());
+  return price ? { price, title: titleOf(card) || ogTitle, source: 'mercado livre: card em destaque', installments } : null;
 }
 
 function firstMatch($, selectors, source) {
@@ -181,9 +202,9 @@ export function extractFromHtml(html, url, selector) {
     if (!found) throw new Error(`O seletor "${selector}" achou elementos, mas nenhum com preço`);
   }
 
-  if (/(^|\.)mercadoli(vre|bre)\./.test(host) && new URL(url).pathname.startsWith('/social/')) {
-    found ||= fromMercadoLivreSocial($);
-  }
+  const mercadoLivre = /(^|\.)mercadoli(vre|bre)\./.test(host);
+  const mlSocial = mercadoLivre && new URL(url).pathname.startsWith('/social/');
+  if (mlSocial) found ||= fromMercadoLivreSocial($);
 
   const site = SITE_SELECTORS.find((s) => s.host.test(host));
   found ||= site ? firstMatch($, site.selectors, 'loja') : null;
@@ -193,15 +214,25 @@ export function extractFromHtml(html, url, selector) {
   found ||= firstMatch($, META_SELECTORS, 'meta');
 
   if (!found) {
-    const blocked = /captcha|are you a human|robot check|access denied|perimeterx|cf-chl|challenge-platform|negative_traffic/i.test(html);
+    const blocked = looksBlocked(html);
+    if (blocked && mercadoLivre && !mlSocial) {
+      throw new Error(
+        'O Mercado Livre bloqueia a página normal do produto. Use o link de afiliado (começa com mercadolivre.com.br/social/).',
+      );
+    }
     throw new Error(
       blocked
-        ? 'A loja bloqueou o acesso automático (captcha/anti-bot). Tente de novo mais tarde.'
+        ? 'A loja bloqueou o acesso automático (captcha/anti-bot). Se continuar, essa loja não funciona com o monitor.'
         : 'Preço não encontrado. Informe um seletor CSS para este produto.',
     );
   }
   const title = (found.title || ld?.title || pageTitle($) || host).toString().trim().slice(0, 150);
-  return { price: found.price, title, source: found.source };
+  // Parcelamento sem juros, quando a página mostra (card do ML; na Amazon, o bloco de compra).
+  let installments = found.installments ?? null;
+  if (!installments && /(^|\.)amazon\./.test(host)) {
+    installments = parseInstallments($('#apex_desktop').first().text()) ?? parseInstallments($('#corePriceDisplay_desktop_feature_div').first().text());
+  }
+  return { price: found.price, title, source: found.source, installments };
 }
 
 export async function fetchPage(url) {

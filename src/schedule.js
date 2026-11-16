@@ -19,11 +19,17 @@ export function activeWindows(windows, now) {
 }
 
 /**
- * Próxima execução: o menor entre o próximo horário diário, o início da próxima janela
- * e (se estiver dentro de uma janela) a última execução + intervalo.
+ * Próxima execução: o menor entre o próximo horário diário, o início da próxima janela,
+ * (dentro de uma janela) a última execução + intervalo da janela e, se houver intervalo fixo
+ * (everyMin > 0), a última execução + everyMin.
  */
-export function computeNextRun({ now, lastRunAt, dailyTimes, windows }) {
+export function computeNextRun({ now, lastRunAt, dailyTimes, windows, everyMin = 0 }) {
   const candidates = [];
+
+  if (everyMin > 0) {
+    const next = lastRunAt ? new Date(new Date(lastRunAt).getTime() + everyMin * MIN) : now;
+    candidates.push(next < now ? now : next);
+  }
 
   for (const [h, m] of parseDailyTimes(dailyTimes)) {
     const d = new Date(now);

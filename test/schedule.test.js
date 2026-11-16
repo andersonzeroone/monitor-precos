@@ -58,6 +58,19 @@ test('janela termina: volta aos horários diários', () => {
   assert.equal(next.getTime(), local(2026, 11, 27, 8).getTime());
 });
 
+test('intervalo fixo: última execução + X min; janela mais rápida vence', () => {
+  const lastRunAt = local(2026, 11, 20, 10, 0).toISOString();
+  const next = computeNextRun({ now: local(2026, 11, 20, 10, 1), dailyTimes: '08:00,20:00', windows, lastRunAt, everyMin: 10 });
+  assert.equal(next.getTime(), local(2026, 11, 20, 10, 10).getTime());
+
+  const never = computeNextRun({ now: local(2026, 11, 20, 10, 1), dailyTimes: '', windows: [], lastRunAt: null, everyMin: 10 });
+  assert.equal(never.getTime(), local(2026, 11, 20, 10, 1).getTime()); // nunca rodou: roda já
+
+  const bfLast = local(2026, 11, 27, 1, 0).toISOString();
+  const bf = computeNextRun({ now: local(2026, 11, 27, 1, 1), dailyTimes: '', windows, lastRunAt: bfLast, everyMin: 10 });
+  assert.equal(bf.getTime(), local(2026, 11, 27, 1, 5).getTime()); // janela de 5 min ganha dos 10
+});
+
 test('sem horários nem janelas: nada agendado', () => {
   assert.equal(computeNextRun({ now: new Date(), dailyTimes: '', windows: [], lastRunAt: null }), null);
 });

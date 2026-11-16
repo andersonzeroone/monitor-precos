@@ -14,6 +14,7 @@ const { runCheck, notifyAll } = await import('./monitor.js');
 const { computeNextRun, activeWindows, parseDailyTimes } = await import('./schedule.js');
 const { PROVIDERS, missingEnv, normalizePhone, evolutionStatus, evolutionConnect } = await import('./whatsapp.js');
 const { parsePrice } = await import('./scraper.js');
+const { SOURCES, DEFAULT_SOURCES, DEFAULT_EXCLUDED, parseSources, findOffers, requiredWords } = await import('./search.js');
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3000);
@@ -39,6 +40,7 @@ function reschedule() {
       lastRunAt: s.last_run_at,
       dailyTimes: s.daily_times,
       windows: listWindows(db),
+      everyMin: Number(s.interval_min) || 0,
     });
   } catch (err) {
     console.error('[agenda]', err.message);
@@ -139,6 +141,11 @@ function getState() {
     settings,
     alerts: db.prepare('SELECT * FROM alerts ORDER BY id DESC LIMIT 30').all(),
     providers: Object.fromEntries(Object.entries(PROVIDERS).map(([k, v]) => [k, { label: v.label, missing: missingEnv(k) }])),
+    search: {
+      sources: Object.values(SOURCES).map((s) => ({ id: s.id, label: s.label })),
+      defaultSources: DEFAULT_SOURCES.split(','),
+      defaultExcluded: DEFAULT_EXCLUDED,
+    },
     status: {
       running: state.running,
       nextRunAt: state.nextRunAt?.toISOString() ?? null,
@@ -155,23 +162,48 @@ route('GET', '/api/state', () => getState());
 
 function checkRange(alertFrom, ideal) {
   if (alertFrom != null && ideal != null && alertFrom < ideal) {
-    throw bad('"Avisar a partir de" precisa ser maior ou igual ao preço ideal');
+    throw bad('"Avisar quando custar até" precisa ser maior ou igual ao preço ideal');
   }
+}
+
+const SEARCH_KEYS = ['query', 'required_words', 'excluded_words', 'min_price', 'sources'];
+const cleanPayment = (v) => (v === 'parcelado' ? 'parcelado' : 'avista');
+
+/** Campos do produto por busca (kind = 'search'). Campos ausentes no body mantêm o valor atual. */
+function searchFields(body, current = {}) {
+  const pick = (key, clean) => (key in body ? clean(body[key]) : (current[key] ?? null));
+  const query = pick('query', (v) => shortText(v, 100, 'Busca'));
+  if (!query || query.length < 2) throw bad('Informe o que buscar (ex.: tcl 55c6k)');
+  return {
+    query,
+    required_words: pick('required_words', (v) => shortText(v, 200, 'Palavras obrigatórias') || null),
+    excluded_words: pick('excluded_words', (v) => shortText(v, 300, 'Palavras excluídas') || null),
+    min_price: pick('min_price', optionalPrice),
+    sources: parseSources(pick('sources', (v) => (Array.isArray(v) ? v.join(',') : String(v ?? '')))).join(','),
+  };
 }
 
 route('POST', '/api/products', ({ body }) => {
   const ideal = optionalPrice(body.target_price);
   const alertFrom = optionalPrice(body.alert_from_price);
   checkRange(alertFrom, ideal);
+  const search = body.kind === 'search';
+  const s = search ? searchFields(body) : {};
   const r = db
-    .prepare('INSERT INTO products (name, url, target_price, alert_from_price, selector, active) VALUES (?, ?, ?, ?, ?, ?)')
+    .prepare(
+      `INSERT INTO products (payment, kind, name, url, target_price, alert_from_price, selector, active,
+         query, required_words, excluded_words, min_price, sources) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
     .run(
-      shortText(body.name, 150, 'Nome'),
-      cleanUrl(body.url),
+      cleanPayment(body.payment),
+      search ? 'search' : 'link',
+      shortText(body.name, 150, 'Nome') || (search ? s.query : ''),
+      search ? '' : cleanUrl(body.url),
       ideal,
       alertFrom,
-      shortText(body.selector, 300, 'Seletor') || null,
+      search ? null : shortText(body.selector, 300, 'Seletor') || null,
       bool(body.active ?? 1),
+      ...SEARCH_KEYS.map((k) => s[k] ?? null),
     );
   const id = Number(r.lastInsertRowid);
   runCheck(db, { productIds: [id] }).catch((e) => console.error(e)); // primeira leitura já
@@ -181,25 +213,43 @@ route('POST', '/api/products', ({ body }) => {
 route('PUT', '/api/products/:id', ({ params, body }) => {
   const p = db.prepare('SELECT * FROM products WHERE id = ?').get(params.id);
   if (!p) throw new HttpError(404, 'Produto não encontrado');
-  const url = 'url' in body ? cleanUrl(body.url) : p.url;
+  const search = p.kind === 'search';
+  const url = !search && 'url' in body ? cleanUrl(body.url) : p.url;
+  const s = search ? searchFields(body, p) : Object.fromEntries(SEARCH_KEYS.map((k) => [k, p[k]]));
   const target = 'target_price' in body ? optionalPrice(body.target_price) : p.target_price;
   const alertFrom = 'alert_from_price' in body ? optionalPrice(body.alert_from_price) : p.alert_from_price;
   checkRange(alertFrom, target);
-  const changedTarget = target !== p.target_price || alertFrom !== p.alert_from_price; // faixa nova: rearma
+  // Busca diferente mede outra coisa: zera o preço anterior para não gerar alerta de queda falso.
+  const payment = 'payment' in body ? cleanPayment(body.payment) : p.payment;
+  // Mudou o que é medido (busca ou forma de pagamento): o preço anterior não serve de comparação.
+  const changedSearch = SEARCH_KEYS.some((k) => s[k] !== p[k]) || payment !== p.payment;
+  const rearm = changedSearch || target !== p.target_price || alertFrom !== p.alert_from_price;
   db.prepare(
-    `UPDATE products SET name = ?, url = ?, target_price = ?, alert_from_price = ?, selector = ?, active = ?,
-       last_alert_price = CASE WHEN ? THEN NULL ELSE last_alert_price END WHERE id = ?`,
+    `UPDATE products SET payment = ?, name = ?, url = ?, target_price = ?, alert_from_price = ?, selector = ?, active = ?,
+       query = ?, required_words = ?, excluded_words = ?, min_price = ?, sources = ?,
+       last_alert_price = CASE WHEN ? THEN NULL ELSE last_alert_price END,
+       last_price = CASE WHEN ? THEN NULL ELSE last_price END WHERE id = ?`,
   ).run(
-    'name' in body ? shortText(body.name, 150, 'Nome') : p.name,
+    payment,
+    'name' in body ? shortText(body.name, 150, 'Nome') || (search ? s.query : '') : p.name,
     url,
     target,
     alertFrom,
-    'selector' in body ? shortText(body.selector, 300, 'Seletor') || null : p.selector,
+    'selector' in body && !search ? shortText(body.selector, 300, 'Seletor') || null : p.selector,
     'active' in body ? bool(body.active) : p.active,
-    changedTarget ? 1 : 0,
+    ...SEARCH_KEYS.map((k) => s[k] ?? null),
+    rearm ? 1 : 0,
+    changedSearch ? 1 : 0,
     p.id,
   );
   return { ok: true };
+});
+
+// Mostra o que a busca encontraria, sem salvar nada (para acertar as palavras antes de cadastrar).
+route('POST', '/api/search-preview', async ({ body }) => {
+  const s = searchFields(body);
+  const { all, offers, failures } = await findOffers({ ...s, payment: cleanPayment(body.payment) });
+  return { total: all.length, offers: offers.slice(0, 10), failures, required: requiredWords(s.required_words, s.query) };
 });
 
 route('DELETE', '/api/products/:id', ({ params }) => {
@@ -267,6 +317,12 @@ route('PUT', '/api/settings', ({ body }) => {
   if ('daily_times' in body) {
     const times = parseDailyTimesOr400(body.daily_times);
     setSetting(db, 'daily_times', times.map(([h, m]) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`).join(','));
+  }
+  if ('interval_min' in body) {
+    const every = Number(body.interval_min || 0);
+    if (!Number.isInteger(every) || every < 0 || every > 1440) throw bad('Verificar a cada: de 0 a 1440 minutos (0 = só nos horários)');
+    if (every > 0 && every < 5) throw bad('Verificar a cada: no mínimo 5 minutos, para as lojas não bloquearem');
+    setSetting(db, 'interval_min', every);
   }
   if ('drop_alert_pct' in body) {
     const pct = Number(body.drop_alert_pct);

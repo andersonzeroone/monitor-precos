@@ -33,7 +33,7 @@ test('faixa: avisa ao entrar, a cada nova queda e destaca o preço ideal', () =>
   assert.deepEqual(step(2790), ['range']); // voltou: avisa de novo
 });
 
-test('faixa só com "avisar a partir de" (sem preço ideal)', () => {
+test('faixa só com "avisar quando custar até" (sem preço ideal)', () => {
   const p = { alert_from_price: 1000, target_price: null, last_price: 1100, last_alert_price: null };
   assert.deepEqual(evaluatePrice(p, 999, 0).reasons, ['range']);
 });
@@ -53,8 +53,12 @@ test('mensagem formatada e quebrada em partes', () => {
   assert.match(block, /Menor preço/);
 
   const inRange = alertBlock({ name: 'TV', url: 'u', price: 2790, prev: 2950, target: 2500, alertFrom: 2800, lowest: 2790, reasons: ['range'] });
-  assert.match(inRange, /Entrou na sua faixa: avisar a partir de R\$ 2\.800,00 · ideal R\$ 2\.500,00/);
+  assert.match(inRange, /Dentro do seu limite de R\$ 2\.800,00 \(preço ideal: R\$ 2\.500,00\)/);
   assert.doesNotMatch(inRange, /Menor preço/); // igual ao menor, não é novo recorde
+
+  const parcelado = alertBlock({ name: 'TV', url: 'u', price: 3699, prev: null, target: null, alertFrom: 3800, lowest: null, reasons: ['range'], store: 'Kabum', installments: { count: 10, value: 369.9, total: 3699 } });
+  assert.match(parcelado, /R\$ 3\.699,00 no total parcelado na Kabum/);
+  assert.match(parcelado, /💳 10x de R\$ 369,90 sem juros/);
 
   const msgs = buildMessages(Array.from({ length: 40 }, () => block));
   assert.ok(msgs.length > 1);
