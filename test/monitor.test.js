@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluatePrice, buildMessages, alertBlock, formatBRL } from '../src/monitor.js';
-import { normalizePhone } from '../src/whatsapp.js';
+import { normalizePhone, samePhone } from '../src/whatsapp.js';
 
 test('alerta de preço alvo: avisa uma vez e de novo só se cair mais', () => {
   let p = { target_price: 1000, last_price: 1200, last_alert_price: null };
@@ -71,4 +71,13 @@ test('normaliza telefones brasileiros', () => {
   assert.equal(normalizePhone('(11) 98888-7777'), '5511988887777');
   assert.equal(normalizePhone('+55 21 3333-4444'), '552133334444');
   assert.throws(() => normalizePhone('123'));
+});
+
+test('reconhece o mesmo número com e sem o 9 extra', () => {
+  assert.equal(samePhone('5511988887777', '551188887777'), true); // o WhatsApp às vezes guarda sem o 9
+  assert.equal(samePhone('5511988887777', '5511988887777'), true);
+  assert.equal(samePhone('5511988887777', '5511988887776'), false);
+  assert.equal(samePhone('5511988887777', '552188887777'), false); // outro DDD
+  assert.equal(samePhone('14155550123', '4155550123'), false); // fora do Brasil, compara exato
+  assert.equal(samePhone('', ''), false);
 });

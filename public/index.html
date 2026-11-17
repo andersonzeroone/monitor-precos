@@ -222,16 +222,20 @@
     <section class="card">
       <h2>Números de WhatsApp</h2>
       <div id="evo-box" class="evo" hidden>
+        <div class="muted small" style="margin-bottom:6px">Quem envia os alertas</div>
         <div class="row">
           <span id="evo-state" class="pill">Verificando conexão…</span>
+          <span id="evo-owner" class="small"></span>
           <button id="evo-connect" type="button">Conectar WhatsApp</button>
+          <button id="evo-switch" class="link" type="button" hidden>Trocar número</button>
         </div>
         <div id="evo-qr" hidden>
           <img id="evo-qr-img" alt="QR code para conectar o WhatsApp" width="240" height="240">
-          <p class="small">No celular: <strong>WhatsApp → Configurações → Aparelhos conectados → Conectar aparelho</strong> e aponte a câmera para o QR code.</p>
+          <p class="small">No celular do número que vai <strong>enviar</strong>: <strong>WhatsApp (ou WhatsApp Business) → Configurações → Aparelhos conectados → Conectar aparelho</strong> e aponte a câmera para o QR code.</p>
         </div>
-        <p class="muted small">Os alertas saem do número conectado. Mensagens para o próprio número conectado chegam no chat “Você”, normalmente sem notificação. Para receber com som, conecte um segundo número (ex.: um chip extra) ou envie para outras pessoas.</p>
+        <p class="muted small">Use um número diferente dos que recebem (ex.: um chip extra com WhatsApp Business). Mensagem para o próprio número que envia cai no chat “Você” e chega sem notificação.</p>
       </div>
+      <div class="muted small" style="margin-bottom:6px">Quem recebe os alertas</div>
       <form id="contact-form" class="grid">
         <label>Nome<input name="name" required maxlength="80" placeholder="ex.: Eu"></label>
         <label>Número com DDD<input name="phone" required inputmode="tel" placeholder="11 98888-7777"></label>
@@ -350,6 +354,7 @@ function renderStatus() {
   else if (info?.missing.length) banner = `⚠️ O provedor <strong>${esc(info.label)}</strong> precisa destas variáveis no arquivo .env: ${info.missing.map(esc).join(', ')}`;
   else if (prov === 'evolution' && evo && evo.state !== 'open') banner = `⚠️ <strong>WhatsApp desconectado</strong>: os alertas não vão sair. ${esc(evo.error || 'Clique em “Conectar WhatsApp”.')}`;
   else if (!state.contacts.some((c) => c.active)) banner = '⚠️ Nenhum número de WhatsApp ativo: cadastre um para receber os alertas.';
+  else if (prov === 'evolution' && evo?.self_contact_ids && state.contacts.filter((c) => c.active).every((c) => evo.self_contact_ids.includes(c.id))) banner = '⚠️ Os alertas vão só para o número que envia e chegam <strong>sem notificação</strong>. Use “Trocar número” para conectar outro número.';
   $('#banner').innerHTML = banner ? `<div class="banner">${banner}</div>` : '';
   $('#apikey-field').hidden = prov !== 'callmebot';
 }
@@ -424,8 +429,9 @@ function renderProducts() {
 
 function renderContacts() {
   const callmebot = state.settings.whatsapp_provider === 'callmebot';
+  const sender = new Set(evo?.self_contact_ids ?? []);
   $('#contacts').innerHTML = state.contacts.map((c) => `<tr class="${c.active ? '' : 'paused'}">
-      <td><strong>${esc(c.name)}</strong><div class="muted small">+${esc(c.phone)}${callmebot && !c.has_apikey ? ' · <span class="err">sem apikey</span>' : ''}</div></td>
+      <td><strong>${esc(c.name)}</strong><div class="muted small">+${esc(c.phone)}${callmebot && !c.has_apikey ? ' · <span class="err">sem apikey</span>' : ''}${sender.has(c.id) ? ' · <span class="err">é o número que envia: chega sem notificação</span>' : ''}</div></td>
       <td class="actions" style="text-align:right">
         <button class="link" data-act="ctoggle" data-id="${c.id}">${c.active ? 'Pausar' : 'Ativar'}</button>
         <button class="link danger" data-act="cdelete" data-id="${c.id}">Excluir</button>
@@ -483,8 +489,11 @@ function renderEvo() {
   pill.textContent = label;
   pill.className = `pill ${cls}`;
   pill.title = evo.error ?? '';
-  $('#evo-connect').hidden = evo.state === 'open';
-  if (evo.state === 'open') stopQr();
+  const open = evo.state === 'open';
+  $('#evo-owner').textContent = open && evo.number ? `enviando de +${evo.number}${evo.name ? ` (${evo.name})` : ''}` : '';
+  $('#evo-connect').hidden = open;
+  $('#evo-switch').hidden = !open;
+  if (open) stopQr();
 }
 
 async function loadEvo() {
@@ -514,11 +523,26 @@ $('#evo-connect').addEventListener('click', async (e) => {
     clearInterval(qrTimer);
     qrTimer = setInterval(async () => {
       ticks++;
-      await loadEvo(); renderEvo(); renderStatus();
+      await loadEvo(); renderEvo(); renderStatus(); renderContacts();
       if (evo?.state === 'open') { toast('✅ WhatsApp conectado!'); return; }
       if (ticks >= 60) { stopQr(); toast('O QR code expirou. Clique em Conectar de novo.'); return; } // ~3 min
       if (ticks % 7 === 0) showQr().catch(() => {}); // renova o QR a cada ~20 s
     }, 3000);
+  } catch (err) {
+    toast('⚠️ ' + err.message);
+  } finally {
+    e.target.disabled = false;
+  }
+});
+
+$('#evo-switch').addEventListener('click', async (e) => {
+  const who = evo?.number ? `+${evo.number}` : 'o número atual';
+  if (!confirm(`Desconectar ${who}? Os alertas param até você ler o QR code com o outro número.`)) return;
+  e.target.disabled = true;
+  try {
+    await api('POST', '/api/whatsapp/disconnect');
+    await loadEvo(); renderEvo(); renderStatus(); renderContacts();
+    $('#evo-connect').click(); // já mostra o QR code para o outro número
   } catch (err) {
     toast('⚠️ ' + err.message);
   } finally {
