@@ -19,6 +19,15 @@ export function normalizePhone(input) {
   return full;
 }
 
+/** Mesmo número? No Brasil ignora o 9 extra do celular, que o WhatsApp às vezes guarda sem ele. */
+export function samePhone(a, b) {
+  const key = (p) => {
+    const d = String(p ?? '').replace(/\D/g, '');
+    return /^55\d{2}9\d{8}$/.test(d) ? d.slice(0, 4) + d.slice(5) : d;
+  };
+  return key(a) !== '' && key(a) === key(b);
+}
+
 async function readError(res) {
   const body = await res.text().catch(() => '');
   return `HTTP ${res.status}: ${body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)}`;
@@ -42,18 +51,40 @@ async function evolution(method, path, body, timeoutMs = 10_000) {
 const evoInstance = () => encodeURIComponent(process.env.EVOLUTION_INSTANCE);
 const evoError = (data) => [data?.response?.message ?? data?.message ?? data?.error ?? data].flat().join(' ').slice(0, 200);
 
-/** state: open | connecting | close | not_found | offline | error */
+/**
+ * state: open | connecting | close | not_found | offline | error.
+ * Conectado, traz também `number` e `name` do WhatsApp de onde saem os alertas.
+ */
 export async function evolutionStatus() {
   try {
     const { status, data } = await evolution('GET', `/instance/connectionState/${evoInstance()}`, null, 4000);
     if (status === 404) return { state: 'not_found' };
     if (status === 401 || status === 403) return { state: 'error', error: 'A Evolution recusou a EVOLUTION_APIKEY do .env' };
     if (status !== 200) return { state: 'error', error: `Evolution respondeu HTTP ${status}: ${evoError(data)}` };
-    return { state: data?.instance?.state ?? 'unknown' };
+    const state = data?.instance?.state ?? 'unknown';
+    return state === 'open' ? { state, ...(await evolutionOwner()) } : { state };
   } catch (err) {
     if (err.message.startsWith('Faltam')) return { state: 'error', error: err.message };
     return { state: 'offline', error: 'A Evolution API não está respondendo. O Docker está aberto? (npm run evolution:up)' };
   }
+}
+
+async function evolutionOwner() {
+  try {
+    const { status, data } = await evolution('GET', `/instance/fetchInstances?instanceName=${evoInstance()}`, null, 4000);
+    const inst = status === 200 && Array.isArray(data) ? data[0] : null;
+    // v2.2+ devolve o registro direto; a v2.1 documentada embrulha em { instance: { owner } }.
+    const jid = inst?.ownerJid ?? inst?.instance?.owner ?? '';
+    return { number: /^(\d{10,15})[:@]/.exec(jid)?.[1] ?? null, name: inst?.profileName ?? inst?.instance?.profileName ?? null };
+  } catch {
+    return {}; // sem o número, o painel só mostra "conectado"
+  }
+}
+
+/** Desconecta o número atual, para conectar outro pelo QR code. */
+export async function evolutionLogout() {
+  const { status, data } = await evolution('DELETE', `/instance/logout/${evoInstance()}`);
+  if (status >= 300) throw new Error(`Evolution: ${evoError(data)}`);
 }
 
 /** Cria a instância se precisar e devolve o QR code (data:image/png;base64,...). */

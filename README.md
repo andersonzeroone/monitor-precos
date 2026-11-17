@@ -98,11 +98,12 @@ A pasta `evolution/` já tem tudo para rodar a Evolution API no Docker, acessív
    ```
 
 4. Rode o monitor (`npm start`). No painel, em **Agenda e alertas**, escolha **Evolution API** e salve.
-5. Em **Números de WhatsApp**, clique em **Conectar WhatsApp** e escaneie o QR code no celular: **WhatsApp → Configurações → Aparelhos conectados → Conectar aparelho**.
-6. Cadastre quem vai receber os alertas e clique em **Enviar teste no WhatsApp**.
+5. Em **Números de WhatsApp → Quem envia os alertas**, clique em **Conectar WhatsApp** e escaneie o QR code no celular do número que vai enviar: **WhatsApp (ou WhatsApp Business) → Configurações → Aparelhos conectados → Conectar aparelho**. O painel passa a mostrar "enviando de +55...".
+6. Em **Quem recebe os alertas**, cadastre os números que vão receber e clique em **Enviar teste no WhatsApp**.
 
 Importante:
-- **Os alertas saem do número que você conectar.** Se você mandar para esse mesmo número, a mensagem cai no chat "Você" e normalmente não toca notificação. Para ser acordado na madrugada da Black Friday, conecte um **segundo número** (um chip extra, ou WhatsApp Business num número separado) e cadastre o seu número principal como destinatário.
+- **Os alertas saem do número que você conectar.** Se você mandar para esse mesmo número, a mensagem cai no chat "Você" e não toca notificação; o painel marca esse contato em vermelho. Para ser acordado na madrugada da Black Friday, conecte um **segundo número** (um chip extra com WhatsApp Business) e cadastre o seu número principal como destinatário.
+- Para trocar o número que envia, clique em **Trocar número**: ele desconecta o atual e mostra um QR code novo.
 - A conexão fica salva no Docker. Os containers voltam sozinhos quando o Docker abre. O painel avisa em vermelho se o WhatsApp desconectar.
 - Para parar a Evolution: `npm run evolution:down`.
 

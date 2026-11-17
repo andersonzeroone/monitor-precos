@@ -12,7 +12,7 @@ process.env.TZ ||= 'America/Sao_Paulo';
 const { openDb, getSettings, setSetting, listWindows } = await import('./db.js');
 const { runCheck, notifyAll } = await import('./monitor.js');
 const { computeNextRun, activeWindows, parseDailyTimes } = await import('./schedule.js');
-const { PROVIDERS, missingEnv, normalizePhone, evolutionStatus, evolutionConnect } = await import('./whatsapp.js');
+const { PROVIDERS, missingEnv, normalizePhone, samePhone, evolutionStatus, evolutionConnect, evolutionLogout } = await import('./whatsapp.js');
 const { parsePrice } = await import('./scraper.js');
 const { SOURCES, DEFAULT_SOURCES, DEFAULT_EXCLUDED, parseSources, findOffers, requiredWords } = await import('./search.js');
 
@@ -350,7 +350,21 @@ route('POST', '/api/test-message', async () => {
   return { results: await notifyAll(db, `✅ Teste do Monitor de Preços (${when}). Se você recebeu, está tudo certo!`) };
 });
 
-route('GET', '/api/whatsapp/status', () => evolutionStatus());
+route('GET', '/api/whatsapp/status', async () => {
+  const s = await evolutionStatus();
+  // Contatos iguais ao número que envia: recebem no chat "Você", sem notificação.
+  if (s.number) s.self_contact_ids = db.prepare('SELECT id, phone FROM contacts').all().filter((c) => samePhone(c.phone, s.number)).map((c) => c.id);
+  return s;
+});
+
+route('POST', '/api/whatsapp/disconnect', async () => {
+  try {
+    await evolutionLogout();
+    return { ok: true };
+  } catch (err) {
+    throw bad(err.message);
+  }
+});
 
 route('POST', '/api/whatsapp/connect', async () => {
   try {
