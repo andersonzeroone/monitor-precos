@@ -95,6 +95,12 @@
   #evo-qr img { display: block; margin-top: 12px; background: #fff; padding: 8px; border-radius: 8px; }
   .pill.ok { color: var(--ok); }
   .pill.bad { color: var(--danger); }
+  dialog.modal { width: min(760px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); }
+  dialog.modal::backdrop { background: rgb(0 0 0 / .5); }
+  .modal-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .modal-head h2 { margin: 0; }
+  .modal-head button { font-size: 18px; line-height: 1; color: var(--muted); }
+  .modal-body { padding: 16px; }
 </style>
 </head>
 <body>
@@ -102,6 +108,7 @@
   <header>
     <h1>📉 Monitor de Preços</h1>
     <div class="row">
+      <button id="btn-add" class="primary">＋ Adicionar produto</button>
       <button id="btn-run" class="primary">Verificar agora</button>
       <button id="btn-test">Enviar teste no WhatsApp</button>
     </div>
@@ -113,8 +120,12 @@
     <div class="status" id="status">Carregando…</div>
   </section>
 
-  <section class="card">
-    <h2 id="product-form-title">Adicionar produto</h2>
+  <dialog id="product-dialog" class="modal" aria-labelledby="product-form-title">
+    <div class="modal-head">
+      <h2 id="product-form-title">Adicionar produto</h2>
+      <button type="button" class="link" id="product-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
     <form id="product-form" class="steps">
       <fieldset class="step">
         <legend><span class="step-num">1</span> Como monitorar</legend>
@@ -190,11 +201,12 @@
       <div class="row">
         <button type="button" id="search-preview" data-kind="search">Testar busca</button>
         <button class="primary" type="submit" id="product-submit">Adicionar</button>
-        <button type="button" id="product-cancel" hidden>Cancelar</button>
+        <button type="button" id="product-cancel">Cancelar</button>
       </div>
     </form>
     <div id="preview" class="preview" aria-live="polite"></div>
-  </section>
+    </div>
+  </dialog>
 
   <section class="card">
     <h2>🔎 Buscas por nome</h2>
@@ -311,6 +323,7 @@ async function api(method, path, body) {
 let toastTimer;
 function toast(msg) {
   const t = $('#toast');
+  (document.querySelector('dialog[open]') || document.body).append(t); // com o modal aberto, o resto da página fica por baixo dele
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
@@ -422,7 +435,7 @@ function renderProducts() {
   const searches = state.products.filter((p) => p.kind === 'search');
   const links = state.products.filter((p) => p.kind !== 'search');
   $('#searches').innerHTML = searches.map(searchRow).join('')
-    || '<tr><td colspan="7" class="muted">Nenhuma busca salva ainda. Escreva o nome do produto em “Nome do produto para buscar”, acima.</td></tr>';
+    || '<tr><td colspan="7" class="muted">Nenhuma busca salva ainda. Clique em “Adicionar produto”, no topo da página.</td></tr>';
   $('#links').innerHTML = links.map(linkRow).join('')
     || '<tr><td colspan="7" class="muted">Nenhum link salvo.</td></tr>';
 }
@@ -601,9 +614,18 @@ function resetProductForm() {
   searchDefaults();
   setKind('search');
   $('#product-submit').textContent = 'Adicionar';
-  $('#product-cancel').hidden = true;
   $('#product-form-title').textContent = 'Adicionar produto';
 }
+
+const productDialog = $('#product-dialog');
+productDialog.addEventListener('close', resetProductForm); // fechar (✕, Cancelar, Esc ou depois de salvar) limpa o formulário
+$('#product-close').addEventListener('click', () => productDialog.close());
+$('#product-cancel').addEventListener('click', () => productDialog.close());
+$('#btn-add').addEventListener('click', () => {
+  if (!formReady) return; // o formulário só fica pronto depois do primeiro /api/state
+  productDialog.showModal();
+  $('#product-form').query.focus();
+});
 
 $('#product-form').addEventListener('change', (e) => {
   if (e.target.name === 'kind') setKind(e.target.value);
@@ -618,11 +640,10 @@ $('#product-form').addEventListener('submit', (e) => {
   act(async () => {
     if (id) await api('PUT', `/api/products/${id}`, body);
     else await api('POST', '/api/products', body);
-    resetProductForm();
+    productDialog.close();
     if (!id) setTimeout(load, search ? 12000 : 6000); // a primeira leitura roda em segundo plano
   }, id ? 'Produto atualizado' : search ? 'Busca cadastrada — procurando ofertas…' : 'Produto adicionado — buscando o preço…');
 });
-$('#product-cancel').addEventListener('click', resetProductForm);
 
 $('#search-preview').addEventListener('click', async (e) => {
   const body = productBody();
@@ -723,9 +744,8 @@ document.addEventListener('click', (e) => {
         f.querySelectorAll('input[name="sources"]').forEach((c) => { c.checked = ids.includes(c.value); });
       }
       $('#product-submit').textContent = 'Salvar alterações';
-      $('#product-cancel').hidden = false;
       $('#product-form-title').textContent = `Editando: ${p.name || host(p.url) || p.query}`;
-      f.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      productDialog.showModal();
       (search ? f.query : f.url).focus();
       break;
     }

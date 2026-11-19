@@ -32,7 +32,7 @@ npm run check-url -- "https://www.kabum.com.br/produto/..."
 
 ## Busca pelo nome (recomendado)
 
-No cadastro, escolha **Buscar pelo nome em várias lojas** e informe o que buscar. A cada rodada o monitor procura o termo em cada fonte e fica com a oferta mais barata cujo título tem **todas** as palavras obrigatórias. O alerta diz a loja e traz o link; o painel mostra as 5 ofertas mais baratas.
+Clique em **＋ Adicionar produto**, no topo do painel, escolha **🔎 Pelo nome** e informe o que buscar. A cada rodada o monitor procura o termo em cada fonte e fica com a oferta mais barata cujo título tem **todas** as palavras obrigatórias. O alerta diz a loja e traz o link; o painel mostra as 5 ofertas mais baratas.
 
 - **O que buscar:** de preferência o código do modelo, ex.: `tcl 55c6k`, `iphone 16 128gb`, `rtx 5070`.
 - **Palavras obrigatórias:** sem preencher, valem as palavras da busca. Números precisam estar "soltos": `55` casa com `55"` e `55C6K`, mas não com `550`.
