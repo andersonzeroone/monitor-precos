@@ -22,7 +22,7 @@ npm install
 npm start
 ```
 
-Abra **http://localhost:3000**.
+Abra **http://localhost:3000**. Para mexer no código, `npm run dev` reinicia o servidor a cada alteração.
 
 Antes de cadastrar, dá para testar se um link funciona:
 
@@ -30,11 +30,14 @@ Antes de cadastrar, dá para testar se um link funciona:
 npm run check-url -- "https://www.kabum.com.br/produto/..."
 ```
 
+Para testar com um seletor CSS, passe-o depois do link: `npm run check-url -- "<link>" ".preco-final"`.
+
 ## Busca pelo nome (recomendado)
 
 Clique em **＋ Adicionar produto**, no topo do painel, escolha **🔎 Pelo nome** e informe o que buscar. A cada rodada o monitor procura o termo em cada fonte e fica com a oferta mais barata cujo título tem **todas** as palavras obrigatórias. O alerta diz a loja e traz o link; o painel mostra as 5 ofertas mais baratas.
 
 - **O que buscar:** de preferência o código do modelo, ex.: `tcl 55c6k`, `iphone 16 128gb`, `rtx 5070`.
+- Em **Opções avançadas** ficam **Onde buscar** (padrão: Buscapé, Amazon e Kabum; veja a tabela abaixo) e os três campos a seguir.
 - **Palavras obrigatórias:** sem preencher, valem as palavras da busca. Números precisam estar "soltos": `55` casa com `55"` e `55C6K`, mas não com `550`.
 - **Palavras excluídas:** já vem com `suporte, controle, capa, cabo, película, combo, usado, recondicionado`, para não pegar acessório.
 - **Ignorar ofertas abaixo de:** descarta preço absurdo (acessório ou erro).
@@ -47,7 +50,7 @@ Clique em **＋ Adicionar produto**, no topo do painel, escolha **🔎 Pelo nome
 | Amazon | Busca da Amazon | a cada 10 min |
 | Kabum | Busca da Kabum, com o preço à vista e o vendedor | sem limite |
 
-Na madrugada da Black Friday, mesmo com a verificação a cada 5 min, Buscapé e Amazon usam o último resultado até passar o intervalo da tabela, para não serem bloqueados. O Mercado Livre bloqueia a busca automática e não aparece no Buscapé para todos os produtos; para ele, use um link de afiliado no modo "link específico".
+Na madrugada da Black Friday, mesmo com a verificação a cada 5 min, Buscapé e Amazon usam o último resultado até passar o intervalo da tabela, para não serem bloqueados. O Mercado Livre bloqueia a busca automática e não aparece no Buscapé para todos os produtos; para ele, use um link de afiliado no modo **🔗 Por um link**.
 
 ## Quais lojas funcionam no modo link
 
@@ -68,7 +71,7 @@ Testado em 15/11/2026:
 
 ## WhatsApp
 
-Escolha o provedor no painel em **Agenda e alertas → Envio de WhatsApp**. Comece pelo modo **Teste**: a mensagem aparece só no terminal. Depois use o botão **Enviar teste no WhatsApp**.
+Escolha o provedor no painel em **Agenda e alertas → Envio de WhatsApp**. Comece pelo modo **Teste**: a mensagem aparece só no terminal (ou em `data/monitor.log`, se o monitor estiver rodando como serviço). Depois use o botão **Enviar teste no WhatsApp**.
 
 | Provedor | Custo | Como configurar |
 | --- | --- | --- |
@@ -106,6 +109,13 @@ Importante:
 - Para trocar o número que envia, clique em **Trocar número**: ele desconecta o atual e mostra um QR code novo.
 - A conexão fica salva no Docker. Os containers voltam sozinhos quando o Docker abre. O painel avisa em vermelho se o WhatsApp desconectar.
 - Para parar a Evolution: `npm run evolution:down`.
+- **Se a Evolution não subir:** o painel diz que ela não responde e o container `api` fica reiniciando, com `P1001: Can't reach database server at postgres:5432` no log (`docker compose -f evolution/docker-compose.yml logs api`). Recrie só o container da API:
+
+  ```bash
+  docker compose -f evolution/docker-compose.yml up -d --force-recreate api
+  ```
+
+  A sessão do WhatsApp fica nos volumes do Docker: não precisa escanear o QR code de novo.
 
 Os alertas de uma mesma verificação vão juntos numa mensagem só:
 
@@ -127,14 +137,15 @@ https://www.kabum.com.br/produto/621162/...
   - Black Friday, madrugada: 26/11 22:00 → 27/11 06:00, a cada 5 min
   - Black Friday, dia: 27/11 06:00 → 28/11 00:00, a cada 15 min
   - Cyber Monday: 30/11 00:00 → 01/12 00:00, a cada 30 min
+  - Elas são criadas só na primeira vez que o monitor roda e não se renovam. No ano seguinte, apague as antigas e cadastre as novas em **Janelas intensivas**.
 - **Faixa de preço** (por produto, os dois campos são opcionais):
   - **Avisar quando custar até**: quando o preço fica igual ou abaixo desse valor, avisa. Avisa de novo a cada nova queda; preço repetido não gera aviso.
   - **Preço ideal**: quando chega nele ou abaixo, o aviso vem destacado com 🎯.
-  - Se o preço sair da faixa (subir acima do "avisar quando custar até"), o aviso é rearmado.
+  - Se o preço sair da faixa (subir acima do "avisar quando custar até") ou você mudar a faixa no painel, o aviso é rearmado.
   - Se o WhatsApp estiver fora do ar e ninguém receber, o aviso vai de novo na verificação seguinte.
   - Exemplo com faixa R$ 2.800 → ideal R$ 2.500: R$ 2.950 não avisa; R$ 2.790 avisa 📉; R$ 2.650 avisa 📉; R$ 2.480 avisa 🎯; R$ 2.300 avisa 🎯.
 - **Queda**: avisa também quando cai pelo menos X% desde a leitura anterior (padrão 5%; 0 desliga).
-- **Forma de pagamento** (por produto):
+- **Forma de pagamento** (por produto; no cadastro já vem marcado **Parcelado sem juros**):
   - **À vista / Pix**: usa o menor preço que a loja mostra.
   - **Parcelado sem juros**: só vale oferta que a loja marca como "sem juros", e o preço comparado com a sua faixa é o **total das parcelas** (ex.: 10x de R$ 359,90 = R$ 3.599). O aviso mostra as parcelas.
   - Onde o parcelamento é lido: Amazon (busca e página do produto), Kabum (busca), Buscapé/Zoom (quando o total parcelado é igual ao preço à vista, que é quando eles escrevem "sem juros") e links de afiliado do Mercado Livre. Em links de outras lojas, o modo parcelado dá erro se a página não mostrar o parcelamento.
@@ -144,13 +155,14 @@ https://www.kabum.com.br/produto/621162/...
 
 O monitor só verifica enquanto o processo está rodando **e o computador está acordado**. Com a Evolution, o Docker Desktop também precisa estar aberto.
 
-- **No Mac (recomendado): como serviço.** O monitor sobe sozinho quando você entra no Mac, volta em até 30 s se cair e não depende de uma janela de terminal aberta. Ele roda com `caffeinate`, que impede o Mac de dormir por inatividade (com a tampa fechada ele dorme mesmo assim; deixe aberto e na tomada).
+- **No Mac (recomendado): como serviço.** O monitor sobe sozinho quando você entra no Mac, volta em até 30 s se cair e não depende de uma janela de terminal aberta. Ele roda com `caffeinate -i`, que impede o Mac de dormir por inatividade, mas não quando a tampa fecha: deixe na tomada e com a tampa aberta (ou fechada, só se estiver ligado a um monitor externo).
 
   ```bash
   npm run service:install
   ```
 
   - Antes, pare o `npm start` que estiver rodando num terminal (o script recusa se a porta estiver ocupada).
+  - Depois de instalar, o macOS mostra um item **caffeinate**, de "desenvolvedor não identificado", em **Ajustes do Sistema → Geral → Itens de Início** (no macOS 15, Itens de Início e Extensões), entre os itens em segundo plano. É o monitor (o serviço roda `caffeinate -i node src/server.js`): deixe ativado, senão ele não sobe.
   - A saída vai para `data/monitor.log` (para acompanhar: `tail -f data/monitor.log`).
   - Depois de atualizar o código: `npm run service:restart`.
   - Se trocar a versão do Node, rode `npm run service:install` de novo.
@@ -163,7 +175,9 @@ O monitor só verifica enquanto o processo está rodando **e o computador está 
   caffeinate -i npm start
   ```
 
-- **Num servidor (VPS):** no `.env`, defina `HOST=0.0.0.0` e `DASHBOARD_PASSWORD`. O painel passa a pedir usuário e senha. Use `pm2` ou `systemd` para manter o processo de pé.
+- **Num servidor (VPS):** cuidado, as lojas costumam bloquear IPs de datacenter. Numa VPS da Hetzner, Buscapé, Zoom e Kabum responderam HTTP 403, enquanto da internet de casa tudo funcionava; por isso o recomendado é o Mac em casa, como serviço. Se usar um servidor mesmo assim: no `.env`, defina `HOST=0.0.0.0` e `DASHBOARD_PASSWORD`. O painel passa a pedir usuário (`admin`, ou o de `DASHBOARD_USER`) e senha. Use `pm2` ou `systemd` para manter o processo de pé.
+
+- **Vercel não funciona:** as funções serverless não têm disco gravável permanente (não dá para usar o SQLite), o cron do plano grátis roda no máximo uma vez por dia e a Evolution API precisa de Docker.
 
 ## Segurança
 
@@ -176,10 +190,12 @@ O monitor só verifica enquanto o processo está rodando **e o computador está 
 ```
 src/server.js     servidor HTTP, API e o loop do agendador
 src/monitor.js    verifica os preços e decide os alertas
-src/scraper.js    lê o preço da página (seletor, Amazon, JSON-LD, meta tags)
+src/scraper.js    lê o preço da página (seletor, Amazon, Mercado Livre, JSON-LD, meta tags)
+src/search.js     busca pelo nome (Buscapé, Zoom, Amazon, Kabum)
 src/schedule.js   horários diários, janelas intensivas e datas da Black Friday
 src/whatsapp.js   provedores de envio
 src/db.js         banco SQLite (data/monitor.db)
+src/check-url.js  o npm run check-url
 public/index.html o painel
 evolution/        Docker Compose e gerador de chaves da Evolution API
 service/          instala o monitor como serviço do macOS (launchd)
