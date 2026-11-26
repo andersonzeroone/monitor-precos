@@ -100,6 +100,11 @@ export async function notifyAll(db, text) {
   return results;
 }
 
+/** Conta como entregue se pelo menos um contato recebeu, ou se não há contato ativo (não adianta repetir). */
+export function delivered(results) {
+  return results.length === 0 || results.some((r) => r.ok);
+}
+
 /** Verifica os preços (todos os ativos ou só os ids informados) e dispara os alertas. */
 export async function runCheck(db, { productIds, delayMs = 1500 } = {}) {
   const startedAt = new Date().toISOString();
@@ -116,6 +121,7 @@ export async function runCheck(db, { productIds, delayMs = 1500 } = {}) {
   const updateBest = db.prepare('UPDATE products SET best_store = ?, best_url = ?, offers_json = ? WHERE id = ?');
 
   const blocks = [];
+  const pending = []; // avisos de faixa: o last_alert_price novo só é gravado depois que o WhatsApp entregar
   let failed = 0;
 
   for (const [i, p] of products.entries()) {
@@ -135,9 +141,12 @@ export async function runCheck(db, { productIds, delayMs = 1500 } = {}) {
       const name = p.name || title;
       const { reasons, lastAlertPrice } = evaluatePrice(p, price, dropPct);
       const lowest = p.lowest_price == null ? price : Math.min(p.lowest_price, price);
+      // Aviso de faixa: mantém o last_alert_price antigo até a entrega; se o envio falhar, a próxima rodada avisa de novo.
+      const rangeAlert = reasons.includes('target') || reasons.includes('range');
+      if (rangeAlert) pending.push({ id: p.id, lastAlertPrice });
 
       insertPrice.run(p.id, price, checkedAt);
-      updateOk.run(name, price, lowest, checkedAt, lastAlertPrice, p.id);
+      updateOk.run(name, price, lowest, checkedAt, rangeAlert ? (p.last_alert_price ?? null) : lastAlertPrice, p.id);
       if (search) {
         updateBest.run(result.store, result.url, JSON.stringify({ offers: result.offers, failures: result.failures }), p.id);
       } else {
@@ -169,7 +178,14 @@ export async function runCheck(db, { productIds, delayMs = 1500 } = {}) {
     }
   }
 
-  for (const text of buildMessages(blocks)) await notifyAll(db, text);
+  let ok = true;
+  for (const text of buildMessages(blocks)) ok = delivered(await notifyAll(db, text)) && ok;
+  if (ok) {
+    const markAlerted = db.prepare('UPDATE products SET last_alert_price = ? WHERE id = ?');
+    for (const a of pending) markAlerted.run(a.lastAlertPrice, a.id);
+  } else if (pending.length) {
+    console.error('[monitor] o WhatsApp não entregou o alerta; ele vai de novo na próxima verificação');
+  }
 
-  return { startedAt, finishedAt: new Date().toISOString(), checked: products.length, failed, alerts: blocks.length };
+  return { startedAt, finishedAt: new Date().toISOString(), checked: products.length, failed, alerts: blocks.length, delivered: ok };
 }

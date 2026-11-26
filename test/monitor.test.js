@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluatePrice, buildMessages, alertBlock, formatBRL } from '../src/monitor.js';
+import { evaluatePrice, buildMessages, alertBlock, formatBRL, delivered } from '../src/monitor.js';
 import { normalizePhone, samePhone } from '../src/whatsapp.js';
 
 test('alerta de preço alvo: avisa uma vez e de novo só se cair mais', () => {
@@ -44,6 +44,12 @@ test('alerta de queda percentual', () => {
   assert.deepEqual(evaluatePrice(p, 950, 5).reasons, ['drop']);
   assert.deepEqual(evaluatePrice(p, 500, 0).reasons, []); // 0 = desligado
   assert.deepEqual(evaluatePrice({ ...p, last_price: null }, 500, 5).reasons, []); // primeira leitura
+});
+
+test('alerta só conta como entregue se algum contato recebeu', () => {
+  assert.equal(delivered([{ ok: false }, { ok: true }]), true);
+  assert.equal(delivered([{ ok: false }, { ok: false }]), false); // WhatsApp fora: avisa de novo na próxima rodada
+  assert.equal(delivered([]), true); // sem contato ativo: não adianta repetir
 });
 
 test('mensagem formatada e quebrada em partes', () => {
