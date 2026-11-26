@@ -131,6 +131,7 @@ https://www.kabum.com.br/produto/621162/...
   - **Avisar quando custar até**: quando o preço fica igual ou abaixo desse valor, avisa. Avisa de novo a cada nova queda; preço repetido não gera aviso.
   - **Preço ideal**: quando chega nele ou abaixo, o aviso vem destacado com 🎯.
   - Se o preço sair da faixa (subir acima do "avisar quando custar até"), o aviso é rearmado.
+  - Se o WhatsApp estiver fora do ar e ninguém receber, o aviso vai de novo na verificação seguinte.
   - Exemplo com faixa R$ 2.800 → ideal R$ 2.500: R$ 2.950 não avisa; R$ 2.790 avisa 📉; R$ 2.650 avisa 📉; R$ 2.480 avisa 🎯; R$ 2.300 avisa 🎯.
 - **Queda**: avisa também quando cai pelo menos X% desde a leitura anterior (padrão 5%; 0 desliga).
 - **Forma de pagamento** (por produto):

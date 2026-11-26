@@ -35,6 +35,7 @@ Monitor de preços com painel web, alerta no WhatsApp e modo intensivo na Black 
 - Faixa: `alert_from_price` ("avisar quando custar até", o limite de cima) e `target_price` ("preço ideal"). Sem limite, a faixa começa no ideal. Na interface, nunca use "a partir de" para esse limite: passa a ideia de "daí para cima".
 - Avisa quando o preço entra na faixa (`<=`) e de novo a cada queda abaixo de `last_alert_price`; preço repetido não avisa. Motivo `target` (🎯) se estiver `<=` ideal, senão `range` (📉).
 - Preço acima da faixa zera `last_alert_price` (rearma). Mudar a faixa pelo painel (`PUT /api/products/:id`) também rearma.
+- Num aviso de faixa (`target`/`range`), o `runCheck` só grava o `last_alert_price` novo depois que o WhatsApp entregar a pelo menos um contato (`delivered`); se nenhum receber, a próxima rodada avisa de novo. Sem contato ativo conta como entregue. O `drop` não se repete, porque compara com `last_price`, que já foi atualizado.
 - Independente da faixa: `drop` quando cai pelo menos `drop_alert_pct`% em relação a `last_price` (0 desliga; a primeira leitura nunca avisa).
 - Os alertas de uma rodada vão juntos numa mensagem (`buildMessages` só quebra acima de 3000 caracteres). Todo envio fica registrado na tabela `alerts`.
 - `test/monitor.test.js` descreve a sequência esperada; atualize junto com a regra.
