@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SOURCES, matchOffers, requiredWords, excludedWords, parseSources, applyPayment } from '../src/search.js';
+import { SOURCES, matchOffers, requiredWords, excludedWords, parseSources, applyPayment, searchSource } from '../src/search.js';
 
 const nextData = (data) => `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(data)}</script>`;
 
@@ -122,4 +122,30 @@ test('Amazon: lê título, preço (inteiro + centavos) e monta o link pelo ASIN'
     installments: { count: 12, value: 319.91, total: 3838.92 },
   });
   assert.equal(offers[1].price, null);
+});
+
+test('fonte com falha usa a última leitura boa por até 60 min, sem esconder o erro', async () => {
+  const html = `<div data-component-type="s-search-result" data-asin="B0F7JZMVKF"><h2>TV TCL 55C6K</h2>
+    <span class="a-price"><span class="a-offscreen">R$ 3.099,00</span></span></div>`;
+  const ok = async () => html;
+  const down = async () => {
+    throw new Error('A loja respondeu HTTP 503');
+  };
+  const q = 'teste-fallback 55c6k'; // o cache é do módulo: busca própria deste teste
+  const t0 = Date.UTC(2026, 10, 27, 3, 0);
+  const min = 60_000;
+
+  const first = await searchSource('amazon', q, t0, ok);
+  assert.deepEqual(first.offers.map((o) => o.price), [3099]);
+  assert.equal(first.error, undefined);
+  // Dentro do intervalo mínimo nem consulta a loja.
+  assert.deepEqual(await searchSource('amazon', q, t0 + 5 * min, down), { offers: first.offers });
+
+  const stale = await searchSource('amazon', q, t0 + 59 * min, down);
+  assert.deepEqual(stale.offers.map((o) => o.price), [3099]);
+  assert.match(stale.error.message, /HTTP 503/);
+  assert.equal(stale.at, t0); // a hora da leitura boa, não a da falha
+
+  await assert.rejects(searchSource('amazon', q, t0 + 60 * min, down), /HTTP 503/); // passou de 60 min
+  await assert.rejects(searchSource('amazon', 'outra busca sem leitura', t0, down), /HTTP 503/);
 });

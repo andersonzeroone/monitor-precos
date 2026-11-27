@@ -15,9 +15,9 @@ export function formatBRL(n) {
  * - Faixa: avisa quando o preço fica <= "avisar quando custar até" (alert_from_price) e de novo a cada nova queda.
  *   Se chegar no "preço ideal" (target_price) ou abaixo, o aviso vem destacado ('target').
  *   Se voltar acima do limite, rearma. Sem limite, a faixa começa no preço ideal.
- * - Queda: avisa quando cai pelo menos dropPct% em relação à leitura anterior.
+ * - Queda: avisa quando cai pelo menos dropPct% em relação a prev (a leitura anterior; veja dropBaseline).
  */
-export function evaluatePrice(product, price, dropPct) {
+export function evaluatePrice(product, price, dropPct, prev = product.last_price) {
   const reasons = [];
   let lastAlertPrice = product.last_alert_price ?? null;
   const ideal = product.target_price ?? null;
@@ -34,19 +34,33 @@ export function evaluatePrice(product, price, dropPct) {
     }
   }
 
-  const prev = product.last_price;
   if (dropPct > 0 && prev != null && price <= prev * (1 - dropPct / 100)) reasons.push('drop');
 
   return { reasons, lastAlertPrice };
 }
 
+/**
+ * Base do aviso de queda. Link: a leitura anterior (last_price). Busca: o preço anterior da mesma
+ * oferta (mesma URL) no offers_json da rodada passada; oferta nova não tem base, e quem decide é só a
+ * faixa. Assim, a melhor oferta mudar de loja (uma fonte que falhou e voltou) não vira queda falsa.
+ * Sem last_price (primeira leitura, ou a busca/forma de pagamento mudou) não há base.
+ */
+export function dropBaseline(product, result) {
+  if (product.kind !== 'search' || product.last_price == null) return product.last_price ?? null;
+  let previous;
+  try {
+    previous = JSON.parse(product.offers_json || '{}').offers;
+  } catch {
+    return null;
+  }
+  return (Array.isArray(previous) && previous.find((o) => o.url === result.url)?.price) || null;
+}
+
 export function alertBlock({ name, url, price, prev, target, alertFrom, lowest, reasons, store, offers, installments }) {
   const lines = [`*${name}*`];
   let priceLine = `💰 ${formatBRL(price)}${installments ? ' no total parcelado' : ''}${store ? ` na ${store}` : ''}`;
-  if (prev != null && prev !== price) {
-    const pct = Math.round(((prev - price) / prev) * 100);
-    priceLine += ` (antes ${formatBRL(prev)}${pct > 0 ? `, -${pct}%` : ''})`;
-  }
+  const pct = prev ? Math.round(((prev - price) / prev) * 100) : null;
+  if (prev != null && prev !== price) priceLine += ` (antes ${formatBRL(prev)}${pct > 0 ? `, -${pct}%` : ''})`;
   lines.push(priceLine);
   if (installments) lines.push(`💳 ${installments.count}x de ${formatBRL(installments.value)} sem juros`);
   if (reasons.includes('target')) lines.push(`🎯 Chegou no seu preço ideal (${formatBRL(target)})`);
@@ -55,6 +69,15 @@ export function alertBlock({ name, url, price, prev, target, alertFrom, lowest, 
       target != null
         ? `📉 Dentro do seu limite de ${formatBRL(alertFrom)} (preço ideal: ${formatBRL(target)})`
         : `📉 Dentro do seu limite de ${formatBRL(alertFrom)}`,
+    );
+  }
+  // Só queda (fora da faixa ou já avisado nesse preço): diz por que avisou, para não parecer engano.
+  if (reasons.includes('drop') && !reasons.includes('target') && !reasons.includes('range')) {
+    const limit = alertFrom ?? target;
+    const above = limit != null && price > limit;
+    lines.push(
+      `📊 Aviso de queda: −${pct}% desde a última verificação` +
+        (above ? `. Ainda acima do seu ${alertFrom != null ? 'limite' : 'preço ideal'} de ${formatBRL(limit)}` : ''),
     );
   }
   if (lowest == null || price < lowest) lines.push('⭐ Menor preço já registrado');
@@ -139,7 +162,8 @@ export async function runCheck(db, { productIds, delayMs = 1500 } = {}) {
       }
       const { price, title } = result;
       const name = p.name || title;
-      const { reasons, lastAlertPrice } = evaluatePrice(p, price, dropPct);
+      const prev = dropBaseline(p, result); // busca: preço anterior da mesma oferta, não da melhor
+      const { reasons, lastAlertPrice } = evaluatePrice(p, price, dropPct, prev);
       const lowest = p.lowest_price == null ? price : Math.min(p.lowest_price, price);
       // Aviso de faixa: mantém o last_alert_price antigo até a entrega; se o envio falhar, a próxima rodada avisa de novo.
       const rangeAlert = reasons.includes('target') || reasons.includes('range');
@@ -159,7 +183,7 @@ export async function runCheck(db, { productIds, delayMs = 1500 } = {}) {
             name,
             url: search ? result.url : p.url,
             price,
-            prev: p.last_price,
+            prev: prev ?? p.last_price, // com aviso de queda, é a mesma base que decidiu a queda
             target: p.target_price,
             alertFrom: p.alert_from_price,
             lowest: p.lowest_price,

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluatePrice, buildMessages, alertBlock, formatBRL, delivered } from '../src/monitor.js';
+import { evaluatePrice, buildMessages, alertBlock, formatBRL, delivered, dropBaseline } from '../src/monitor.js';
 import { normalizePhone, samePhone } from '../src/whatsapp.js';
 
 test('alerta de preço alvo: avisa uma vez e de novo só se cair mais', () => {
@@ -44,6 +44,61 @@ test('alerta de queda percentual', () => {
   assert.deepEqual(evaluatePrice(p, 950, 5).reasons, ['drop']);
   assert.deepEqual(evaluatePrice(p, 500, 0).reasons, []); // 0 = desligado
   assert.deepEqual(evaluatePrice({ ...p, last_price: null }, 500, 5).reasons, []); // primeira leitura
+});
+
+test('busca: a queda compara com o preço anterior da mesma oferta, não com a melhor anterior', () => {
+  const kabum = 'https://www.kabum.com.br/produto/938048/tv';
+  const amazon = 'https://www.amazon.com.br/dp/B0F7JZMVKF';
+  // Rodada anterior: a Amazon falhou e a melhor oferta virou a da Kabum (R$ 3.399).
+  const p = {
+    kind: 'search',
+    alert_from_price: 3400,
+    target_price: null,
+    last_price: 3399,
+    last_alert_price: 3099, // já avisou a R$ 3.099 (Amazon)
+    offers_json: JSON.stringify({ offers: [{ url: kabum, price: 3399 }, { url: 'x', price: 4954 }], failures: ['Amazon: A loja respondeu HTTP 503'] }),
+  };
+
+  // A Amazon voltou a R$ 3.099: oferta nova para a rodada, sem base de queda; e 3.099 não é < 3.099.
+  assert.equal(dropBaseline(p, { url: amazon, price: 3099 }), null);
+  assert.deepEqual(evaluatePrice(p, 3099, 5, dropBaseline(p, { url: amazon })).reasons, []);
+  assert.deepEqual(evaluatePrice(p, 3099, 5).reasons, ['drop']); // comparando com o last_price daria a queda falsa
+
+  // A mesma oferta da Kabum caindo de verdade: base é o preço dela na rodada anterior.
+  assert.equal(dropBaseline(p, { url: kabum }), 3399);
+  assert.deepEqual(evaluatePrice(p, 3199, 5, dropBaseline(p, { url: kabum })).reasons, ['drop']);
+  assert.equal(dropBaseline({ ...p, offers_json: JSON.stringify({ offers: [{ url: 'x', price: 4954 }] }) }, { url: 'x' }), 4954);
+
+  // Sem leitura anterior (primeira, ou a busca/forma de pagamento mudou), offers_json vazio ou inválido: sem base.
+  assert.equal(dropBaseline({ ...p, last_price: null }, { url: kabum }), null);
+  assert.equal(dropBaseline({ ...p, offers_json: null }, { url: kabum }), null);
+  assert.equal(dropBaseline({ ...p, offers_json: '{' }, { url: kabum }), null);
+
+  // Link continua comparando com a leitura anterior.
+  assert.equal(dropBaseline({ kind: 'link', last_price: 4249, offers_json: '{"installments":null}' }, { url: 'u' }), 4249);
+});
+
+test('aviso só de queda explica o motivo e diz se ainda está acima da faixa', () => {
+  // Caso real: TV com preço ideal R$ 3.200 e sem limite, avisada a R$ 3.766,90 só pela queda.
+  const tv = { name: 'TV C6K', url: 'u', price: 3766.9, prev: 4249, target: 3200, alertFrom: null, lowest: 3099, reasons: ['drop'] };
+  const block = alertBlock(tv);
+  assert.match(block, /\(antes R\$ 4\.249,00, -11%\)/);
+  assert.match(block, /📊 Aviso de queda: −11% desde a última verificação\. Ainda acima do seu preço ideal de R\$ 3\.200,00/);
+
+  const withLimit = alertBlock({ ...tv, alertFrom: 3400 });
+  assert.match(withLimit, /−11% desde a última verificação\. Ainda acima do seu limite de R\$ 3\.400,00/);
+
+  // Sem faixa nenhuma: só o motivo.
+  const noRange = alertBlock({ ...tv, target: null });
+  assert.match(noRange, /📊 Aviso de queda: −11% desde a última verificação$/m);
+  assert.doesNotMatch(noRange, /Ainda acima/);
+
+  // Dentro da faixa, mas já avisado nesse preço: não diz "acima".
+  assert.doesNotMatch(alertBlock({ ...tv, alertFrom: 4000 }), /Ainda acima/);
+
+  // Com aviso de faixa junto, a linha de faixa já explica.
+  assert.doesNotMatch(alertBlock({ ...tv, price: 3100, reasons: ['target', 'drop'] }), /📊/);
+  assert.doesNotMatch(alertBlock({ ...tv, alertFrom: 3800, reasons: ['range', 'drop'] }), /📊/);
 });
 
 test('alerta só conta como entregue se algum contato recebeu', () => {

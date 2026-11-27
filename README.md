@@ -50,7 +50,7 @@ Clique em **＋ Adicionar produto**, no topo do painel, escolha **🔎 Pelo nome
 | Amazon | Busca da Amazon | a cada 10 min |
 | Kabum | Busca da Kabum, com o preço à vista e o vendedor | sem limite |
 
-Na madrugada da Black Friday, mesmo com a verificação a cada 5 min, Buscapé e Amazon usam o último resultado até passar o intervalo da tabela, para não serem bloqueados. O Mercado Livre bloqueia a busca automática e não aparece no Buscapé para todos os produtos; para ele, use um link de afiliado no modo **🔗 Por um link**.
+Na madrugada da Black Friday, mesmo com a verificação a cada 5 min, Buscapé e Amazon usam o último resultado até passar o intervalo da tabela, para não serem bloqueados. Se uma fonte falhar (fora do ar ou bloqueio), o monitor continua usando a última leitura boa dela por até 60 min, e o painel mostra o erro com a hora dessa leitura. O Mercado Livre bloqueia a busca automática e não aparece no Buscapé para todos os produtos; para ele, use um link de afiliado no modo **🔗 Por um link**.
 
 ## Quais lojas funcionam no modo link
 
@@ -144,7 +144,8 @@ https://www.kabum.com.br/produto/621162/...
   - Se o preço sair da faixa (subir acima do "avisar quando custar até") ou você mudar a faixa no painel, o aviso é rearmado.
   - Se o WhatsApp estiver fora do ar e ninguém receber, o aviso vai de novo na verificação seguinte.
   - Exemplo com faixa R$ 2.800 → ideal R$ 2.500: R$ 2.950 não avisa; R$ 2.790 avisa 📉; R$ 2.650 avisa 📉; R$ 2.480 avisa 🎯; R$ 2.300 avisa 🎯.
-- **Queda**: avisa também quando cai pelo menos X% desde a leitura anterior (padrão 5%; 0 desliga).
+- **Queda**: avisa também quando cai pelo menos X% desde a leitura anterior (padrão 5%; 0 desliga), mesmo fora da faixa. Esse aviso vem com 📊, o % da queda e, se o preço ainda estiver acima da faixa, o seu limite ou preço ideal.
+  - Na busca pelo nome, compara cada oferta com o preço dela mesma na leitura anterior. Se a melhor oferta só mudou de loja (uma fonte que falhou e voltou, por exemplo), não é queda; quem decide é a faixa.
 - **Forma de pagamento** (por produto; no cadastro já vem marcado **Parcelado sem juros**):
   - **À vista / Pix**: usa o menor preço que a loja mostra.
   - **Parcelado sem juros**: só vale oferta que a loja marca como "sem juros", e o preço comparado com a sua faixa é o **total das parcelas** (ex.: 10x de R$ 359,90 = R$ 3.599). O aviso mostra as parcelas.
