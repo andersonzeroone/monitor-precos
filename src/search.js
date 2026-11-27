@@ -167,16 +167,11 @@ export function matchOffers(offers, { query, required, excluded, minPrice }) {
     .sort((a, b) => a.price - b.price);
 }
 
-const cache = new Map(); // "fonte|busca" -> { at, offers }
+const cache = new Map(); // "fonte|busca" -> { at, offers } (última leitura boa)
+const STALE_MIN = 60; // fonte com falha: usa a última leitura boa por até 60 min
 
-/** Busca numa fonte, respeitando o intervalo mínimo entre consultas iguais. */
-export async function searchSource(id, query, now = Date.now()) {
-  const source = SOURCES[id];
-  const key = `${id}|${normalize(query).trim()}`;
-  const cached = cache.get(key);
-  if (cached && now - cached.at < source.minIntervalMin * MIN) return cached.offers;
-
-  const html = await fetchPage(source.url(query));
+async function readSource(source, query, fetcher) {
+  const html = await fetcher(source.url(query));
   let offers;
   try {
     offers = source.parse(html);
@@ -186,9 +181,31 @@ export async function searchSource(id, query, now = Date.now()) {
   // Páginas normais às vezes citam "captcha" nos scripts; só desconfia de bloqueio se a página não
   // trouxe os dados estruturados (Amazon, que é HTML puro, sem nenhum card).
   if (!offers.length && !source.structured && looksBlocked(html)) throw new Error('bloqueou o acesso automático');
-  cache.set(key, { at: now, offers });
   return offers;
 }
+
+/**
+ * Busca numa fonte, respeitando o intervalo mínimo entre consultas iguais. Devolve { offers }.
+ * Se a fonte falhar e houver leitura boa de até STALE_MIN, devolve essa leitura com o erro
+ * ({ offers, error, at }): a melhor oferta não pula para outra loja e depois volta como queda falsa.
+ */
+export async function searchSource(id, query, now = Date.now(), fetcher = fetchPage) {
+  const source = SOURCES[id];
+  const key = `${id}|${normalize(query).trim()}`;
+  const cached = cache.get(key);
+  if (cached && now - cached.at < source.minIntervalMin * MIN) return { offers: cached.offers };
+  try {
+    const offers = await readSource(source, query, fetcher);
+    cache.set(key, { at: now, offers });
+    return { offers };
+  } catch (error) {
+    if (cached && now - cached.at < STALE_MIN * MIN) return { offers: cached.offers, error, at: cached.at };
+    throw error;
+  }
+}
+
+const errorText = (err) => (err.name === 'TimeoutError' ? 'não respondeu' : err.message);
+const clock = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
 /**
  * Forma de pagamento: 'avista' usa o menor preço (Pix/à vista); 'parcelado' só aceita ofertas com
@@ -199,16 +216,21 @@ export function applyPayment(offers, payment) {
   return offers.filter((o) => o.installments).map((o) => ({ ...o, price: o.installments.total }));
 }
 
-/** Busca em todas as fontes do produto. Uma fonte com falha não impede as outras. */
+/**
+ * Busca em todas as fontes do produto. Uma fonte com falha não impede as outras; se ela tiver leitura
+ * boa recente, as ofertas dela continuam valendo e a falha fica registrada mesmo assim.
+ */
 export async function findOffers(p) {
   const ids = parseSources(p.sources);
   const all = [];
   const failures = [];
   for (const id of ids) {
     try {
-      all.push(...(await searchSource(id, p.query)));
+      const r = await searchSource(id, p.query);
+      all.push(...r.offers);
+      if (r.error) failures.push(`${SOURCES[id].label}: ${errorText(r.error)} (usando a leitura de ${clock(r.at)})`);
     } catch (err) {
-      failures.push(`${SOURCES[id].label}: ${err.name === 'TimeoutError' ? 'não respondeu' : err.message}`);
+      failures.push(`${SOURCES[id].label}: ${errorText(err)}`);
     }
   }
   const offers = matchOffers(applyPayment(all, p.payment), {
